@@ -6,4 +6,4 @@ Activation_Energy_JMAX,48041.88
 VCMAX,85
 JMAX,170
 Photosynthetic_Light_Response_Factor,0.7
-BTemp_Phen,12
+Base_temperature,12
