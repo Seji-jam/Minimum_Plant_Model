@@ -1,6 +1,6 @@
 ﻿Ambient_CO2,400
 Fraction_AboveGround_Carbon,0.65
-SLA_Const,0.16
+Specific_leaf_area,0.16
 Leaf_Blade_Angle,45
 Activation_Energy_JMAX,48041.88
 VCMAX,85
