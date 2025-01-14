@@ -1,0 +1,4 @@
+﻿name,thermal_time_initiation,allocation_priority,max_size,initial_size,rate
+RP1,0,1,27.42123019,0.013215724,0.004317336
+RP2,10,2,15,0.013215724,0.004317336
+RP3,400,3,22,0.013215724,0.004317336
