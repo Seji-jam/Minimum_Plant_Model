@@ -322,6 +322,11 @@ class AbovegroundEnvironment(Environment):
         Sunlit_Fraction = 1. / Direct_Beam_Extinction_Coefficient / Leaf_Area_Index * (
                     1. - np.exp(-Direct_Beam_Extinction_Coefficient * Leaf_Area_Index))
 
+
+        Absorbed_PAR_Sunlit /= Leaf_Area_Index * Sunlit_Fraction # changing radiation from per ground area to per leaf area
+        Absorbed_PAR_Shaded /= Leaf_Area_Index * (1 - Sunlit_Fraction) # changing radiation from per ground area to per leaf area
+        
+        
         # store aboveground variables as dict and add canopy temperature entries
         aboveground_variables = {
           'Absorbed_PAR_Sunlit': Absorbed_PAR_Sunlit,
@@ -492,8 +497,8 @@ class Plant:
       """
       Sunlit_Fraction = environmental_variables['Sunlit_fraction']
       self.__assimilation_sunlit, self.__assimilation_shaded = self.carbon_assimilation.sunlit_shaded_photosynthesis(environmental_variables)
-      self.__assimilation_shaded /= (self.__Leaf_Area_Index * (1-Sunlit_Fraction))
-      self.__assimilation_sunlit /= (self.__Leaf_Area_Index * Sunlit_Fraction)
+      #self.__assimilation_shaded /= (self.__Leaf_Area_Index * (1-Sunlit_Fraction))
+      #self.__assimilation_sunlit /= (self.__Leaf_Area_Index * Sunlit_Fraction)
 
     def compute_carbon_assimilated(self, environmental_variables):
       """
