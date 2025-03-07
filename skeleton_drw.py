@@ -508,7 +508,7 @@ class Plant:
 
 
         # creating a priority que instance for allocation
-        self.allocation_queue = PriorityQueue(
+        self.carbon_allocation_queue = PriorityQueue(
             priority_func=lambda rp: rp.allocation_priority )
 
 
@@ -524,7 +524,7 @@ class Plant:
             )
             self.__resource_pools.append(rp_obj)
             # Also add each pool to the priority queue
-            self.allocation_queue.add_item(rp_obj)
+            self.carbon_allocation_queue.add_item(rp_obj)
     
     
     
@@ -584,7 +584,7 @@ class Plant:
         def allocate_func(rp, amount):
             rp.receive_carbon(amount)
 
-        leftover = self.allocation_queue.allocate_resource(
+        leftover = self.carbon_allocation_queue.allocate_resource(
             total_resource=self.__carbon_pool,
             demand_func=demand_func,
             allocate_func=allocate_func
