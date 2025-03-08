@@ -322,6 +322,11 @@ class AbovegroundEnvironment(Environment):
         Sunlit_Fraction = 1. / Direct_Beam_Extinction_Coefficient / Leaf_Area_Index * (
                     1. - np.exp(-Direct_Beam_Extinction_Coefficient * Leaf_Area_Index))
 
+
+        Absorbed_PAR_Sunlit /= Leaf_Area_Index * Sunlit_Fraction # changing radiation from per ground area to per leaf area
+        Absorbed_PAR_Shaded /= Leaf_Area_Index * (1 - Sunlit_Fraction) # changing radiation from per ground area to per leaf area
+        
+        
         # store aboveground variables as dict and add canopy temperature entries
         aboveground_variables = {
           'Absorbed_PAR_Sunlit': Absorbed_PAR_Sunlit,
@@ -438,6 +443,50 @@ class CarbonAssimilation:
                                                   VPD = environmental_variables['VPD'])
       return photosynthesis_sunlit, photosynthesis_shaded
 
+
+class PriorityQueue:
+    """
+    This class provides a genric priority que for resource allocation.
+    """
+    def __init__(self, priority_func=None):
+        """
+        :param priority_func: A function that takes RP
+                             and returns the priority value.
+        """
+        self.priority_func = priority_func
+        self.items = []
+
+    def add_item(self, item):
+        """ 
+        this is to add different RPs to the que
+        """
+        self.items.append(item)
+
+    def allocate_resource(self, total_resource, demand_func, allocate_func):
+        """
+        :param total_resource: How much resource we have (e.g. carbon or nitrogen pool for later).
+        :param demand_func: function(item) -> demand.
+        :param allocate_func: function(item, allocation) to finalize allocation.
+        :return: leftover resource after allocation.
+        """
+        
+        
+        initiated_items = [it for it in self.items if it.is_initiated]
+        # Sort by priority
+        initiated_items.sort(key=self.priority_func)
+        # Allocate
+        remaining = total_resource
+        for it in initiated_items:
+            demand = demand_func(it)
+            to_allocate = min(demand, remaining)
+            allocate_func(it, to_allocate)
+            remaining -= to_allocate
+            if remaining <= 0:
+                break
+        return remaining
+
+
+
 from typing_extensions import Self
 #@title Plant class
 class Plant:
@@ -457,20 +506,28 @@ class Plant:
         self.carbon_assimilation = CarbonAssimilation(self.__parameters) # instantiate process objects to handle physiology. later - transpiration and nitrogen
         self.__resource_pools = []
 
+
+        # creating a priority que instance for allocation
+        self.carbon_allocation_queue = PriorityQueue(
+            priority_func=lambda rp: rp.allocation_priority )
+
+
     def create_resource_pools(self):
-        """
-        Create resource pool objects based on resource pool parameters
-        """
-        self.__resource_pools = [
-            ResourcePool(
+        for rp in self.resource_pool_params:
+            rp_obj = ResourcePool(
                 name=rp['name'],
                 thermal_time_initiation=rp['thermal_time_initiation'],
                 allocation_priority=rp['allocation_priority'],
                 max_size=rp['max_size'],
                 initial_size=rp['initial_size'],
                 growth_rate=rp['rate']
-            ) for rp in self.resource_pool_params
-        ]
+            )
+            self.__resource_pools.append(rp_obj)
+            # Also add each pool to the priority queue
+            self.carbon_allocation_queue.add_item(rp_obj)
+    
+    
+    
 
     def update_thermal_age(self, environmental_variables):
         """
@@ -492,8 +549,8 @@ class Plant:
       """
       Sunlit_Fraction = environmental_variables['Sunlit_fraction']
       self.__assimilation_sunlit, self.__assimilation_shaded = self.carbon_assimilation.sunlit_shaded_photosynthesis(environmental_variables)
-      self.__assimilation_shaded /= (self.__Leaf_Area_Index * (1-Sunlit_Fraction))
-      self.__assimilation_sunlit /= (self.__Leaf_Area_Index * Sunlit_Fraction)
+      #self.__assimilation_shaded /= (self.__Leaf_Area_Index * (1-Sunlit_Fraction))
+      #self.__assimilation_sunlit /= (self.__Leaf_Area_Index * Sunlit_Fraction)
 
     def compute_carbon_assimilated(self, environmental_variables):
       """
@@ -513,31 +570,28 @@ class Plant:
       Canopy_total_carbon_assimilated *= self.__parameters['Single_plant_ground_area'] # in units g C on a plant basis
       self.__carbon_pool += Canopy_total_carbon_assimilated
 
+
+
     def allocate_carbon(self, environmental_variables):
-        """
-        Allocates C to resource pools from the plant C pool
-        """
-        #update initiation status of resource pools
+        # first to update initiation status for resource pools
         for rp in self.__resource_pools:
             rp.update_initiation_status(self.__thermal_age)
 
-        initiated_rps = [rp for rp in self.__resource_pools if rp.is_initiated]
+        # then use pririty que to distribute carbon
+        def demand_func(rp):
+            return rp.compute_demand(self.__thermal_age, self.__thermal_age_increment)
 
-        #compute resource pool demand
-        demands = {}
-        total_demand = 0.0
+        def allocate_func(rp, amount):
+            rp.receive_carbon(amount)
 
-        for rp in initiated_rps:
-            demand = rp.compute_demand(self.__thermal_age, self.__thermal_age_increment)
-            demands[rp] = demand
-            total_demand += demand
-
-        sorted_rps = sorted(initiated_rps, key=lambda x: x.allocation_priority)
-
-        for rp in sorted_rps:
-            allocation = min(demands[rp], self.__carbon_pool)
-            rp.receive_carbon(allocation)
-            self.__carbon_pool -= allocation
+        leftover = self.carbon_allocation_queue.allocate_resource(
+            total_resource=self.__carbon_pool,
+            demand_func=demand_func,
+            allocate_func=allocate_func
+        )
+        self.__carbon_pool = leftover
+        
+        
 
     def update_leaf_area_index(self):
       """
