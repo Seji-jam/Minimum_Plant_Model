@@ -457,7 +457,7 @@ class PriorityQueue:
 
     def add_item(self, item):
         """ 
-        this is to add different RPs to the que
+        this is to add different RPs to the queue
         """
         self.items.append(item)
 
@@ -505,7 +505,7 @@ class Plant:
         self.carbon_assimilation = CarbonAssimilation(self.__parameters) # instantiate process objects to handle physiology. later - transpiration and nitrogen
         self.__resource_pools = []
         self.carbon_allocation_queue = PriorityQueue(
-            priority_func=lambda rp: rp.carbon_allocation_priority ) # creating a priority queue instance for allocation
+            priority_func=lambda rp: rp.carbon_allocation_priority ) # creating a priority queue instance for carbon allocation based on the RP's carbon_allocation_priority attribute
 
 
     def create_resource_pools(self):
@@ -569,9 +569,9 @@ class Plant:
         for rp in self.__resource_pools:
             rp.update_initiation_status(self.__thermal_age)
 
-        # then use pririty que to distribute carbon
+        # then use priority queue to distribute carbon
         def demand_func(rp):
-            return rp.compute_demand(self.__thermal_age, self.__thermal_age_increment)
+            return rp.compute_carbon_demand(self.__thermal_age, self.__thermal_age_increment)
 
         def allocate_func(rp, amount):
             rp.receive_carbon(amount)
@@ -686,7 +686,7 @@ class ResourcePool:
         relative_growth_rate = f_prime / f
         return relative_growth_rate
 
-  def compute_demand(self, plant_thermal_time, thermal_time_increment):
+  def compute_carbon_demand(self, plant_thermal_time, thermal_time_increment):
         """
         Demand by the resource pool is computed by the potential growth increment based on
         thermal age of the resource pool and the thermal time increment from the previous timestep.
@@ -698,6 +698,7 @@ class ResourcePool:
         self.rgr = relative_growth_rate ###### tracking this for testing. --> remove later
         demand = relative_growth_rate * self.current_size * thermal_time_increment
         self.demand = demand
+        # currently assumes that this is all directly related to carbon; later can adjust so C demand (and later N) is based on a proportion of total biomass
         return demand
 
   def receive_carbon(self, allocated_carbon):
@@ -711,7 +712,7 @@ class ResourcePool:
 driver_file = 'https://raw.githubusercontent.com/DRWang3/MPM_testing/refs/heads/main/model%20input%20files/drivers_natural_all.csv'
 
 parameter_file =  'https://raw.githubusercontent.com/DRWang3/MPM_testing/refs/heads/main/model%20input%20files/parameters.csv'
-resource_pool_file ='https://raw.githubusercontent.com/DRWang3/MPM_testing/refs/heads/main/model%20input%20files/resource_pools_2RPs.csv'
+resource_pool_file ='https://raw.githubusercontent.com/DRWang3/MPM_testing/refs/heads/main/model%20input%20files/resource_pools_3RPs.csv'
 
 model = ModelHandler(driver_file, parameter_file, resource_pool_file)
 model.run_simulation()
