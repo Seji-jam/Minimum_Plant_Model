@@ -323,8 +323,8 @@ class AbovegroundEnvironment(Environment):
                     1. - np.exp(-Direct_Beam_Extinction_Coefficient * Leaf_Area_Index))
 
 
-        Absorbed_PAR_Sunlit /= Leaf_Area_Index * Sunlit_Fraction # changing radiation from per ground area to per leaf area
-        Absorbed_PAR_Shaded /= Leaf_Area_Index * (1 - Sunlit_Fraction) # changing radiation from per ground area to per leaf area
+        Absorbed_PAR_Sunlit /= Leaf_Area_Index * Sunlit_Fraction # changing radiation from per ground area to per leaf area for use in photosynthesis calculation
+        Absorbed_PAR_Shaded /= Leaf_Area_Index * (1 - Sunlit_Fraction) # changing radiation from per ground area to per leaf area for use in photosynthesis calculation
         
         
         # store aboveground variables as dict and add canopy temperature entries
@@ -381,7 +381,8 @@ class CarbonAssimilation:
 
   def photosynthesis(self, Leaf_Temp, Absorbed_PAR, VPD):
       """
-      Calculate the net photosynthesis rate of a C3 plant canopy. From ref: [ADD REFERENCE HERE]
+      Calculate the net photosynthesis rate of a C3 plant canopy. From ref: [ADD REFERENCE HERE] 
+      Sajad, is this the REF? ->  Farquhar G.D., von Caemmerer S. & Berry J.A. (1980) A biochemical model of photosynthetic CO2 assimilation in leaves of C3 species. Planta 149, 78–90.
       Parameters:
       - Absorbed_PAR: Photosynthetically Active Radiation absorbed by the canopy, per unit ground area [W m⁻²]
       - Leaf_Temp: Canopy temperature [°C]
@@ -389,9 +390,7 @@ class CarbonAssimilation:
       Returns:
       - Gross_Photosynthesis: Gross_Photosynthesis rate of canopy, per unit ground area [g CO₂ m⁻² s⁻¹]
 
-      Calculations on a per unit ground area is noted in Table 3 of: De Pury DG, Farquhar GD.
-      Simple scaling of photosynthesis from leaves to canopies without the errors of big‐leaf models.
-      Plant, Cell & Environment. 1997 May;20(5):537-57.
+      Calculations on a per unit leaf area 
       """
       # constants
       Activation_Energy_VCMAX = 65330  # Energy of activation for VCMAX (J/mol)
