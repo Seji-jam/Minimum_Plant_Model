@@ -426,9 +426,9 @@ class CarbonAssimilation:
       Carboxylation_Rate_Rubisco_Limited = Adjusted_VCMAX * Intercellular_CO2 / (Intercellular_CO2 + KMC * (O2_Concentration / KMO + 1.))
       Carboxylation_Rate_Electron_Transport_Limited = Adjusted_Electron_Transport_Rate * Intercellular_CO2 * (2 + 0 - 0) / Protons_For_ATP_Synthesis / (0 + 3 * Intercellular_CO2 + 7 * CO2_Compensation_No_Respiration) / (1 - 0)
 
-      Gross_Photosynthesis = (1 - CO2_Compensation_No_Respiration / Intercellular_CO2) * min(Carboxylation_Rate_Rubisco_Limited, Carboxylation_Rate_Electron_Transport_Limited)
+      Photosynthesis = (1 - CO2_Compensation_No_Respiration / Intercellular_CO2) * min(Carboxylation_Rate_Rubisco_Limited, Carboxylation_Rate_Electron_Transport_Limited)
 
-      return Gross_Photosynthesis # µmol CO₂ m⁻² s⁻¹ (ground area basis)
+      return Photosynthesis # µmol CO₂ m⁻² s⁻¹ (leaf area basis)
 
   def sunlit_shaded_photosynthesis(self, environmental_variables):
       """
@@ -543,13 +543,10 @@ class Plant:
     def carry_out_photosynthesis(self, environmental_variables):
       """
       Carry out photosynthesis for sunlit and shaded components of the canopy
-      Note - Updates assimilation_sunlit and assimilation_shaded in units of
-      µmol CO₂ m⁻²leaf area s⁻¹ to compare better with observations (i.e. LI6800)
+      in units of µmol CO₂ m⁻²leaf area s⁻¹ 
       """
       Sunlit_Fraction = environmental_variables['Sunlit_fraction']
       self.__assimilation_sunlit, self.__assimilation_shaded = self.carbon_assimilation.sunlit_shaded_photosynthesis(environmental_variables)
-      #self.__assimilation_shaded /= (self.__Leaf_Area_Index * (1-Sunlit_Fraction))
-      #self.__assimilation_sunlit /= (self.__Leaf_Area_Index * Sunlit_Fraction)
 
     def compute_carbon_assimilated(self, environmental_variables):
       """
