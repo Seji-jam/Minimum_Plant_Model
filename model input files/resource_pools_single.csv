@@ -1,2 +1,2 @@
-﻿name,initiation_thermal_time,allocation_priority,max_size,initial_size,rate
-RP1,0,1,27.42,0.013,0.004317
+﻿name,initiation_thermal_time,max_size,initial_size,rate,carbon_allocation_priority
+RP1,0,27.42,0.013,0.004317,1

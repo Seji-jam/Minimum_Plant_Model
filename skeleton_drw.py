@@ -445,7 +445,7 @@ class CarbonAssimilation:
 
 class PriorityQueue:
     """
-    This class provides a genric priority que for resource allocation.
+    This class provides a generic priority queue to handle the allocation of resources.
     """
     def __init__(self, priority_func=None):
         """
@@ -504,11 +504,8 @@ class Plant:
         self.latitude = 0
         self.carbon_assimilation = CarbonAssimilation(self.__parameters) # instantiate process objects to handle physiology. later - transpiration and nitrogen
         self.__resource_pools = []
-
-
-        # creating a priority que instance for allocation
         self.carbon_allocation_queue = PriorityQueue(
-            priority_func=lambda rp: rp.allocation_priority )
+            priority_func=lambda rp: rp.allocation_priority ) # creating a priority queue instance for allocation
 
 
     def create_resource_pools(self):
@@ -516,7 +513,7 @@ class Plant:
             rp_obj = ResourcePool(
                 name=rp['name'],
                 thermal_time_initiation=rp['thermal_time_initiation'],
-                allocation_priority=rp['allocation_priority'],
+                allocation_priority=rp['carbon_allocation_priority'],
                 max_size=rp['max_size'],
                 initial_size=rp['initial_size'],
                 growth_rate=rp['rate']
@@ -552,7 +549,7 @@ class Plant:
       """
       Calculates average canopy assimilation based on sunlit and shaded fractions
       and uses it to compute total carbon assimilated by the plant in current timestep.
-      Since assimilation was converted to a per leaf area basis, need to multiply
+      Since assimilation is computed on a per leaf area basis, need to multiply
       by LAI and single plant ground area to get per plant basis.
 
       Canopy_total_carbon_assimilated *= single_plant_ground_area *= leaf_area_index
@@ -565,7 +562,6 @@ class Plant:
       Canopy_total_carbon_assimilated *= (1E-6) * 12  # In units g carbon m⁻² ground area; (12 g carbon per mol CO₂ )
       Canopy_total_carbon_assimilated *= self.__parameters['Single_plant_ground_area'] # in units g C on a plant basis
       self.__carbon_pool += Canopy_total_carbon_assimilated
-
 
 
     def allocate_carbon(self, environmental_variables):
