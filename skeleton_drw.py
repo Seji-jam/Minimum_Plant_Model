@@ -505,7 +505,7 @@ class Plant:
         self.carbon_assimilation = CarbonAssimilation(self.__parameters) # instantiate process objects to handle physiology. later - transpiration and nitrogen
         self.__resource_pools = []
         self.carbon_allocation_queue = PriorityQueue(
-            priority_func=lambda rp: rp.allocation_priority ) # creating a priority queue instance for allocation
+            priority_func=lambda rp: rp.carbon_allocation_priority ) # creating a priority queue instance for allocation
 
 
     def create_resource_pools(self):
@@ -513,10 +513,10 @@ class Plant:
             rp_obj = ResourcePool(
                 name=rp['name'],
                 thermal_time_initiation=rp['thermal_time_initiation'],
-                allocation_priority=rp['carbon_allocation_priority'],
                 max_size=rp['max_size'],
                 initial_size=rp['initial_size'],
-                growth_rate=rp['rate']
+                growth_rate=rp['rate'],
+                carbon_allocation_priority=rp['carbon_allocation_priority']
             )
             self.__resource_pools.append(rp_obj)
             # Also add each pool to the priority queue
@@ -644,11 +644,11 @@ class ResourcePool:
   the model to run is simply one. In the current model structure, the first RP is assumed to
   represent total leaves (due to LAI being calculated from this RP).
   """
-  def __init__(self, name, thermal_time_initiation, allocation_priority, max_size, initial_size, growth_rate):
+  def __init__(self, name, thermal_time_initiation, carbon_allocation_priority, max_size, initial_size, growth_rate):
         self.name = name
         self.is_initiated = False
         self.thermal_time_initiation = thermal_time_initiation
-        self.allocation_priority = allocation_priority
+        self.carbon_allocation_priority = carbon_allocation_priority
         self.max_size = max_size
         self.growth_rate = growth_rate
         self.initial_size = initial_size
