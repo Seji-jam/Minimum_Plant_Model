@@ -447,12 +447,12 @@ class PriorityQueue:
     """
     This class provides a generic priority queue to handle the allocation of resources.
     """
-    def __init__(self, priority_func=None):
+    def __init__(self, get_priority=None):
         """
-        :param priority_func: A function that takes RP
+        :param get_priority: A function that takes RP
                              and returns the priority value.
         """
-        self.priority_func = priority_func
+        self.RP_priority = get_priority
         self.items = []
 
     def add_item(self, item):
@@ -472,7 +472,7 @@ class PriorityQueue:
         
         initiated_items = [it for it in self.items if it.is_initiated]
         # Sort by priority
-        initiated_items.sort(key=self.priority_func)
+        initiated_items.sort(key=self.RP_priority)
         # Allocate
         remaining = total_resource
         for it in initiated_items:
@@ -505,7 +505,7 @@ class Plant:
         self.carbon_assimilation = CarbonAssimilation(self.__parameters) # instantiate process objects to handle physiology. later - transpiration and nitrogen
         self.__resource_pools = []
         self.carbon_allocation_queue = PriorityQueue(
-            priority_func=lambda rp: rp.carbon_allocation_priority ) # creating a priority queue instance for carbon allocation based on the RP's carbon_allocation_priority attribute
+            get_priority =lambda rp: rp.carbon_allocation_priority ) # creating a priority queue instance for carbon allocation based on the RP's carbon_allocation_priority attribute
 
 
     def create_resource_pools(self):
