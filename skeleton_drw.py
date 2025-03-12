@@ -664,7 +664,7 @@ class PriorityQueue:
     """
     def __init__(self, resource_pools, resource_demand_function):
         self.resource_pools = resource_pools
-        self.resource_demand_function = resource_demand_function # specifies the demand function (whether growth or  maintenance)
+        self.resource_demand_function = resource_demand_function # specifies the demand function (whether growth or maintenance)
 
     def allocate_resources(self, carbon_pool, nitrogen_pool, thermal_age, thermal_age_increment):
         """
@@ -873,7 +873,7 @@ class ResourcePool:
         relative_growth_rate = f_prime / f
         return relative_growth_rate
 
-  def compute_growth_demand(self, plant_thermal_time, thermal_time_increment):
+  def compute_growth_demand(self, plant_thermal_time, thermal_time_increment, current_size):
         """
         Demand by the resource pool is computed by the potential growth increment based on
         thermal age of the resource pool and the thermal time increment from the previous timestep.
@@ -888,7 +888,7 @@ class ResourcePool:
         nitrogen_demand = 0
         return carbon_demand, nitrogen_demand
 
-  def compute_maintenance_demand(self):
+  def compute_maintenance_demand(self, plant_thermal_time, thermal_time_increment, current_size):  # extra parameters are not used but makes the call to a flexible demand function in PriorityQueue.allocate_resources simpler
       """
       For now, just assumes it is 1% of total RP size, can make this more specific later
       """
