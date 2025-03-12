@@ -74,7 +74,7 @@ class ModelHandler:
         plt.show()
 
         # Plotting available C
-        plt.plot(self.log_thermal_age, self.log_available_carbon, linestyle='-')
+        plt.plot(self.log_thermal_age, self.log_carbon_pool, linestyle='-')
         plt.xlabel('thermal time (deg day)')
         plt.ylabel('carbon pool')
         plt.grid(True)
@@ -95,7 +95,7 @@ class ModelHandler:
         self.log_rp = []
         self.log_rp_demand = []
         self.log_rp_rgr = []
-        self.log_available_carbon = []
+        self.log_carbon_pool = []
         self.log_resource_pool_sizes = {rp.name: [] for rp in plant_instance.get_resource_pools()}
 
     def update_logs(self, plant_instance):
@@ -103,9 +103,9 @@ class ModelHandler:
         self.log_thermal_age.append(plant_instance.get_thermal_age())
         self.log_lai.append(plant_instance.get_leaf_area_index())
         self.log_rp.append(plant_instance.get_resource_pools()[0].current_size)
-        self.log_rp_demand.append(plant_instance.get_resource_pools()[0].growth_demand)
+        self.log_rp_demand.append(plant_instance.get_resource_pools()[0].demand)
         self.log_rp_rgr.append(plant_instance.get_resource_pools()[0].rgr)
-        self.log_available_carbon.append(plant_instance.get_available_carbon())
+        self.log_carbon_pool.append(plant_instance.get_carbon_pool())
         # update resource pools sizes for any number of resource pools
         for rp in plant_instance.get_resource_pools():
           self.log_resource_pool_sizes[rp.name].append(rp.current_size)
@@ -341,6 +341,133 @@ class AbovegroundEnvironment(Environment):
     # getter
     def get_environmental_variables(self):
         return self.__environmental_variables
+    """
+    This subclass handles computations in the aboveground plant jacket.
+    Currently, these procedures are all related to the canopy light regime.
+    """
+    def __init__(self, exogenous_inputs):
+        super().__init__(exogenous_inputs)  # Call the initializer of the base class
+        self.__environmental_variables = self.exogenous_inputs # stores as 'environmental_variables' so interface variables can be added
+
+    """
+    Methods below are associated with the canopy light regime
+
+    The light interception and absorption is based on the de Wit, Goudriaan model (Beer-Lambert Law, in general).
+    Also, the calculation of extinction coefficients within the canopy are provided in:
+    Anten, N.P., 1997. Modelling canopy photosynthesis using parameters determined from simple non‐destructive measurements. Ecological Research, 12(1), pp.77-88.
+    Goudriaan, J., 1977. Crop micrometeorology: a simulation study. Wageningen University and Research.
+    de Wit, C.T., 1965. Photosynthesis of leaf canopies (No. 663). Pudoc.
+    """
+    """
+    The details of Sun/shade model and calculation of sunlit (and shaded fractions) are provided in:
+    De Pury, D.G.G. and Farquhar, G.D., 1997. Simple scaling of photosynthesis from leaves to canopies without the errors of big‐leaf models. Plant, Cell & Environment, 20(5), pp.537-557
+
+    The calculation of direct and diffused radiation within the canopy are provided in:
+    Spitters, C.J.T., 1986. Separating the diffuse and direct component of global radiation and its implications for modeling canopy photosynthesis Part II. Calculation of canopy photosynthesis. Agricultural and Forest meteorology, 38(1-3), pp.231-242.
+
+    """
+
+    def KDR_Coeff(self,Solar_Elev_Sin, Leaf_Blade_Angle):
+        Solar_Elev_Angle = np.arcsin(Solar_Elev_Sin)
+        if Solar_Elev_Sin >= np.sin(Leaf_Blade_Angle):
+            Leaf_Orientation_Avg = Solar_Elev_Sin * np.cos(Leaf_Blade_Angle)
+        else:
+            Leaf_Orientation_Avg = (2 / np.pi) * (Solar_Elev_Sin * np.cos(Leaf_Blade_Angle) * np.arcsin(np.tan(Solar_Elev_Angle) / np.tan(Leaf_Blade_Angle)) + ((np.sin(Leaf_Blade_Angle))**2 - Solar_Elev_Sin**2)**0.5)
+
+        Direct_Beam_Ext_Coeff = Leaf_Orientation_Avg / Solar_Elev_Sin
+        return Direct_Beam_Ext_Coeff
+
+    def KDF_Coeff(self, Leaf_Area_Index, Leaf_Blade_Angle, Scattering_Coeff):
+        Beam_Ext_Coeff_15 = self.KDR_Coeff(np.sin(15. * np.pi / 180.), Leaf_Blade_Angle)
+        Beam_Ext_Coeff_45 = self.KDR_Coeff(np.sin(45. * np.pi / 180.), Leaf_Blade_Angle)
+        Beam_Ext_Coeff_75 = self.KDR_Coeff(np.sin(75. * np.pi / 180.), Leaf_Blade_Angle)
+
+        Diffuse_Ext_Coeff = -1 / Leaf_Area_Index * np.log(0.178 * np.exp(-Beam_Ext_Coeff_15 * (1.0 - Scattering_Coeff)**0.5 * Leaf_Area_Index) +
+                            0.514 * np.exp(-Beam_Ext_Coeff_45 * (1.0 - Scattering_Coeff)**0.5 * Leaf_Area_Index) +
+                            0.308 * np.exp(-Beam_Ext_Coeff_75 * (1.0 - Scattering_Coeff)**0.5 * Leaf_Area_Index))
+        return Diffuse_Ext_Coeff
+
+    def REFLECTION_Coeff(self,Leaf_Scattering_Coeff, Direct_Beam_Ext_Coeff):
+        Scattered_Beam_Ext_Coeff = Direct_Beam_Ext_Coeff * (1 - Leaf_Scattering_Coeff)**0.5
+        Horizontal_Leaf_Phase_Function = (1 - (1 - Leaf_Scattering_Coeff)**0.5) / (1 + (1 - Leaf_Scattering_Coeff)**0.5)
+        Canopy_Beam_Reflect_Coeff = 1 - np.exp(-2 * Horizontal_Leaf_Phase_Function * Direct_Beam_Ext_Coeff / (1 + Direct_Beam_Ext_Coeff))
+        return Scattered_Beam_Ext_Coeff, Canopy_Beam_Reflect_Coeff
+
+    def LIGHT_ABSORB(self,Scattering_Coeff, Direct_Beam_Ext_Coeff, Scattered_Beam_Ext_Coeff, Diffuse_Ext_Coeff, Canopy_Beam_Reflect_Coeff, Canopy_Diffuse_Reflect_Coeff, Incident_Direct_Beam_Rad, Incident_Diffuse_Rad, Leaf_Area_Index):
+        Total_Canopy_Absorbed_Light = (1. - Canopy_Beam_Reflect_Coeff) * Incident_Direct_Beam_Rad * (1. - np.exp(-Scattered_Beam_Ext_Coeff * Leaf_Area_Index)) + (1. - Canopy_Diffuse_Reflect_Coeff) * Incident_Diffuse_Rad * (1. - np.exp(-Diffuse_Ext_Coeff * Leaf_Area_Index))
+
+        Absorbed_Sunlit_Rad = (1 - Scattering_Coeff) * Incident_Direct_Beam_Rad * (1 - np.exp(-Direct_Beam_Ext_Coeff * Leaf_Area_Index)) \
+            + (1 - Canopy_Diffuse_Reflect_Coeff) * Incident_Diffuse_Rad / (Diffuse_Ext_Coeff + Direct_Beam_Ext_Coeff) * Diffuse_Ext_Coeff * (1 - np.exp(-(Diffuse_Ext_Coeff + Direct_Beam_Ext_Coeff) * Leaf_Area_Index)) \
+            + Incident_Direct_Beam_Rad * ((1 - Canopy_Beam_Reflect_Coeff) / (Scattered_Beam_Ext_Coeff + Direct_Beam_Ext_Coeff) * Scattered_Beam_Ext_Coeff * (1 - np.exp(-(Scattered_Beam_Ext_Coeff + Direct_Beam_Ext_Coeff) * Leaf_Area_Index)) \
+                                          - (1 - Scattering_Coeff) * (1 - np.exp(-2 * Direct_Beam_Ext_Coeff * Leaf_Area_Index)) / 2)
+
+        Absorbed_Shaded_Rad = Total_Canopy_Absorbed_Light - Absorbed_Sunlit_Rad
+        return Absorbed_Sunlit_Rad, Absorbed_Shaded_Rad
+
+    def compute_canopy_light_environment(self, Leaf_Blade_Angle, Leaf_Area_Index):
+        # constants needed for computation
+        """
+        The details of Sun/shade model and calculation of sunlit (and shaded fractions) are provided in:
+        De Pury, D.G.G. and Farquhar, G.D., 1997. Simple scaling of photosynthesis from leaves to canopies without the errors of big‐leaf models. Plant, Cell & Environment, 20(5), pp.537-557
+
+        The calculation of direct and diffused radiation within the canopy are provided in:
+        Spitters, C.J.T., 1986. Separating the diffuse and direct component of global radiation and its implications for modeling canopy photosynthesis Part II. Calculation of canopy photosynthesis. Agricultural and Forest meteorology, 38(1-3), pp.231-242.
+        """
+        Scattering_Coefficient_PAR = 0.2  # Leaf scattering coefficient for PAR
+        Canopy_Diffuse_Reflection_Coefficient_PAR = 0.057  # Canopy diffuse PAR reflection coefficient
+
+        Incoming_PAR = 0.5 * self.exogenous_inputs['radiation']
+        Atmospheric_Transmissivity = Incoming_PAR / (0.5 * self.exogenous_inputs['Solar_Constant'] * self.exogenous_inputs['Sin_Beam'])
+
+        if Atmospheric_Transmissivity < 0.22:
+            Diffuse_Light_Fraction = 1
+        elif 0.22 < Atmospheric_Transmissivity <= 0.35:
+            Diffuse_Light_Fraction = 1 - 6.4 * (Atmospheric_Transmissivity - 0.22) ** 2
+        else:
+            Diffuse_Light_Fraction = 1.47 - 1.66 * Atmospheric_Transmissivity
+
+        Diffuse_Light_Fraction = max(Diffuse_Light_Fraction, 0.15 + 0.85 * (1 - np.exp(-0.1 / self.exogenous_inputs['Sin_Beam'])))
+
+        Diffuse_PAR = Incoming_PAR * Diffuse_Light_Fraction
+        Direct_PAR = Incoming_PAR - Diffuse_PAR
+
+        Leaf_Blade_Angle_Radians = Leaf_Blade_Angle * np.pi / 180.
+        Direct_Beam_Extinction_Coefficient = self.KDR_Coeff(self.exogenous_inputs['Sin_Beam'], Leaf_Blade_Angle_Radians)
+        Diffuse_Extinction_Coefficient_PAR = self.KDF_Coeff(Leaf_Area_Index, Leaf_Blade_Angle_Radians, Scattering_Coefficient_PAR)
+
+        Scattered_Beam_Extinction_Coefficient_PAR, Canopy_Beam_Reflection_Coefficient_PAR = self.REFLECTION_Coeff(
+            Scattering_Coefficient_PAR, Direct_Beam_Extinction_Coefficient)
+
+        Absorbed_PAR_Sunlit, Absorbed_PAR_Shaded = self.LIGHT_ABSORB(Scattering_Coefficient_PAR,
+                                                                     Direct_Beam_Extinction_Coefficient,
+                                                                     Scattered_Beam_Extinction_Coefficient_PAR,
+                                                                     Diffuse_Extinction_Coefficient_PAR,
+                                                                     Canopy_Beam_Reflection_Coefficient_PAR,
+                                                                     Canopy_Diffuse_Reflection_Coefficient_PAR,
+                                                                     Direct_PAR, Diffuse_PAR, Leaf_Area_Index)
+
+        Sunlit_Fraction = 1. / Direct_Beam_Extinction_Coefficient / Leaf_Area_Index * (
+                    1. - np.exp(-Direct_Beam_Extinction_Coefficient * Leaf_Area_Index))
+
+
+        Absorbed_PAR_Sunlit /= Leaf_Area_Index * Sunlit_Fraction # changing radiation from per ground area to per leaf area for use in photosynthesis calculation
+        Absorbed_PAR_Shaded /= Leaf_Area_Index * (1 - Sunlit_Fraction) # changing radiation from per ground area to per leaf area for use in photosynthesis calculation
+        
+        
+        # store aboveground variables as dict and add canopy temperature entries
+        aboveground_variables = {
+          'Absorbed_PAR_Sunlit': Absorbed_PAR_Sunlit,
+          'Absorbed_PAR_Shaded': Absorbed_PAR_Shaded,
+          'Sunlit_fraction': Sunlit_Fraction,
+          'Sunlit_leaf_temperature': self.exogenous_inputs['temperature'],
+          'Shaded_leaf_temperature': self.exogenous_inputs['temperature']
+        }
+        # update and store as collective environmental variables
+        self.__environmental_variables.update(aboveground_variables)
+
+    # getter
+    def get_environmental_variables(self):
+        return self.__environmental_variables
 
 #@title Carbon assimilation
 
@@ -441,50 +568,129 @@ class CarbonAssimilation:
                                                   Absorbed_PAR = environmental_variables['Absorbed_PAR_Shaded'],
                                                   VPD = environmental_variables['VPD'])
       return photosynthesis_sunlit, photosynthesis_shaded
+  """
+  Methods class that holds functions associated with photosynthesis
+  """
+  def __init__(self, parameters):
+      self.parameters = parameters
+
+  def compute_Ci(self, Leaf_Temp, VPD):
+      """
+      Computes intercellular CO2 (Ci) for photosynthesis
+
+      Calculations are drived from Leuning (1995) which present a model of how stomatal conductance responds to environmental factors
+      Leuning R. (1995) A critical appraisal of a combined stomatal-photosynthesis model for C 3 plants. Plant, Cell and Environment18, 339–355.
+      """
+      VPD_Slope = 0.195127
+      Ambient_CO2 = self.parameters['Ambient_CO2']
+
+      Saturated_Vapor_Pressure_Leaf = 0.611 * np.exp(17.4 * Leaf_Temp / (Leaf_Temp + 239.))
+      Vapor_Pressure_Deficit_Leaf = max(0, Saturated_Vapor_Pressure_Leaf - VPD)
+
+      Michaelis_Menten_CO2_25C =  404.9
+      Michaelis_Menten_O2_25C =  278.4
+      KMC = Michaelis_Menten_CO2_25C * np.exp((1./298. - 1./(Leaf_Temp + 273.)) * 79430 / 8.314)
+      KMO = Michaelis_Menten_O2_25C * np.exp((1./298. - 1./(Leaf_Temp + 273.)) * 36380 / 8.314)
+      Dark_Respiration_VCMAX_Ratio_25C=0.0089
+
+      CO2_compensation_point_no_resp = 0.5 * np.exp(-3.3801 + 5220./(Leaf_Temp + 273.) / 8.314) * 210 * KMC / KMO
+      dark_respiration_Vcmax_ratio = Dark_Respiration_VCMAX_Ratio_25C * np.exp((1/298 - 1/(Leaf_Temp + 273)) * (46390 - 65330) / 8.314)
+      CO2_compensation_point_conditional =(CO2_compensation_point_no_resp + dark_respiration_Vcmax_ratio * KMC * (1 + 210 / KMO)) / (1 - dark_respiration_Vcmax_ratio)
+      CO2_compensation_point = CO2_compensation_point_conditional
+
+      Intercellular_CO2_Ratio = 1 - (1 - CO2_compensation_point / Ambient_CO2) * (0.14 + VPD_Slope * Vapor_Pressure_Deficit_Leaf)
+      Intercellular_CO2 = Intercellular_CO2_Ratio * Ambient_CO2
+      return Intercellular_CO2
+
+  def photosynthesis(self, Leaf_Temp, Absorbed_PAR, VPD):
+      """
+      Calculate the net photosynthesis rate of a C3 plant canopy. From ref: [ADD REFERENCE HERE] 
+      Sajad, is this the REF? ->  Farquhar G.D., von Caemmerer S. & Berry J.A. (1980) A biochemical model of photosynthetic CO2 assimilation in leaves of C3 species. Planta 149, 78–90.
+      Parameters:
+      - Absorbed_PAR: Photosynthetically Active Radiation absorbed by the canopy, per unit ground area [W m⁻²]
+      - Leaf_Temp: Canopy temperature [°C]
+      - VPD: Vapor pressure deficit [kPa]
+      Returns:
+      - Gross_Photosynthesis: Gross_Photosynthesis rate of canopy, per unit ground area [g CO₂ m⁻² s⁻¹]
+
+      Calculations on a per unit leaf area 
+      """
+      # constants
+      Activation_Energy_VCMAX = 65330  # Energy of activation for VCMAX (J/mol)
+      Activation_Energy_Jmax = 43790  # Energy of activation for Jmax (J/mol)
+      Entropy_Term_JT_Equation = 650  # Entropy term in JT equation (J/mol/K)
+      Deactivation_Energy_Jmax = 200000  # Energy of deactivation for Jmax (J/mol)
+      Protons_For_ATP_Synthesis = 3  # Number of protons required to synthesize 1 ATP
+      Maximum_Electron_Transport_Efficiency = 0.85  # Maximum electron transport efficiency of PS II
+      O2_Concentration = 210  # Oxygen concentration (mmol/mol)
+
+      # compute intercellular CO2
+      Intercellular_CO2 = self.compute_Ci(Leaf_Temp, VPD)
+      Intercellular_CO2 = 415 * 0.7 #########   THIS IS JUST FOR TESTING -- REMOVE LATER; EMPIRICAL (70% of ambient co2)
+
+      temp_factor = 1. / 298. - 1. / (Leaf_Temp + 273.)
+      Carboxylation_Temperature_Effect = math.exp(temp_factor * Activation_Energy_VCMAX / 8.314)
+      Electron_Transport_Temperature_Effect = (math.exp(temp_factor * Activation_Energy_Jmax / 8.314) * (1. + math.exp(Entropy_Term_JT_Equation / 8.314 - Deactivation_Energy_Jmax / 298. / 8.314)) / (1. + math.exp(Entropy_Term_JT_Equation / 8.314 - 1. / (Leaf_Temp + 273.) * Deactivation_Energy_Jmax / 8.314)))
+
+      Adjusted_VCMAX = self.parameters['VCMAX'] * Carboxylation_Temperature_Effect
+      Adjusted_JMAX =  self.parameters['JMAX'] * Electron_Transport_Temperature_Effect
+
+      Photon_Flux_Density = 4.56 * Absorbed_PAR
+
+      KMC = 404.9 * math.exp(temp_factor * 79430 / 8.314)
+      KMO = 278.4 * math.exp(temp_factor * 36380 / 8.314)
+
+      CO2_Compensation_No_Respiration = 0.5 * math.exp(-3.3801 + 5220. / (Leaf_Temp + 273.) / 8.314) * O2_Concentration * KMC / KMO
+
+      Quantum_Efficiency_Adjustment = (1 - 0) / (1 + (1 - 0) / Maximum_Electron_Transport_Efficiency)
+      Electron_Transport_Ratio = Quantum_Efficiency_Adjustment * Photon_Flux_Density / max(1E-10, Adjusted_JMAX)
+      Adjusted_Electron_Transport_Rate = Adjusted_JMAX * (1 + Electron_Transport_Ratio - ((1 + Electron_Transport_Ratio)**2 - 4 * Electron_Transport_Ratio * self.parameters['Photosynthetic_Light_Response_Factor'])**0.5) / 2 / self.parameters['Photosynthetic_Light_Response_Factor']
+
+      Carboxylation_Rate_Rubisco_Limited = Adjusted_VCMAX * Intercellular_CO2 / (Intercellular_CO2 + KMC * (O2_Concentration / KMO + 1.))
+      Carboxylation_Rate_Electron_Transport_Limited = Adjusted_Electron_Transport_Rate * Intercellular_CO2 * (2 + 0 - 0) / Protons_For_ATP_Synthesis / (0 + 3 * Intercellular_CO2 + 7 * CO2_Compensation_No_Respiration) / (1 - 0)
+
+      Photosynthesis = (1 - CO2_Compensation_No_Respiration / Intercellular_CO2) * min(Carboxylation_Rate_Rubisco_Limited, Carboxylation_Rate_Electron_Transport_Limited)
+
+      return Photosynthesis # µmol CO₂ m⁻² s⁻¹ (leaf area basis)
+
+  def sunlit_shaded_photosynthesis(self, environmental_variables):
+      """
+      Applies photosynthesis to sunlit and shaded components of the canopy.
+      """
+      photosynthesis_sunlit = self.photosynthesis(Leaf_Temp = environmental_variables['Sunlit_leaf_temperature'],
+                                                  Absorbed_PAR = environmental_variables['Absorbed_PAR_Sunlit'],
+                                                  VPD = environmental_variables['VPD'])
+      photosynthesis_shaded = self.photosynthesis(Leaf_Temp = environmental_variables['Shaded_leaf_temperature'],
+                                                  Absorbed_PAR = environmental_variables['Absorbed_PAR_Shaded'],
+                                                  VPD = environmental_variables['VPD'])
+      return photosynthesis_sunlit, photosynthesis_shaded
 
 
 class PriorityQueue:
     """
-    This class provides a generic priority queue to handle the allocation of resources.
+    This class represents a priority queue used for resource allocation.
     """
-    def __init__(self, get_priority=None):
-        """
-        :param get_priority: A function that takes RP
-                             and returns the priority value.
-        """
-        self.RP_priority = get_priority
-        self.items = []
+    def __init__(self, resource_pools):
+        self.resource_pools = resource_pools
 
-    def add_item(self, item):
-        """ 
-        this is to add different RPs to the queue
+    def allocate_growth_resources(self, carbon_pool, thermal_age, thermal_age_increment):
         """
-        self.items.append(item)
-
-    def allocate_resource(self, total_resource, demand_func, allocate_func):
+        Allocates growth resources to resource pools from the plant carbon pool.
         """
-        :param total_resource: How much resource we have (e.g. carbon or nitrogen pool for later).
-        :param demand_func: function(item) -> demand.
-        :param allocate_func: function(item, allocation) to finalize allocation.
-        :return: leftover resource after allocation.
-        """
-        
-        
-        initiated_items = [it for it in self.items if it.is_initiated]
-        # Sort by priority
-        initiated_items.sort(key=self.RP_priority)
-        # Allocate
-        remaining = total_resource
-        for it in initiated_items:
-            demand = demand_func(it)
-            to_allocate = min(demand, remaining)
-            allocate_func(it, to_allocate)
-            remaining -= to_allocate
-            if remaining <= 0:
-                break
-        return remaining
-
-
+        initiated_rps = [rp for rp in self.resource_pools if rp.is_initiated]
+        # Compute resource pool demand
+        demands = {}
+        total_demand = 0.0
+        for rp in initiated_rps:
+            demand = rp.compute_demand(thermal_age, thermal_age_increment)
+            demands[rp] = demand
+            total_demand += demand
+        sorted_rps = sorted(initiated_rps, key=lambda x: x.growth_allocation_priority)
+        for rp in sorted_rps:
+            allocation = min(demands[rp], carbon_pool)
+            rp.receive_carbon(allocation)
+            carbon_pool -= allocation
+        return carbon_pool
 
 from typing_extensions import Self
 #@title Plant class
@@ -498,38 +704,33 @@ class Plant:
         self.__assimilation_sunlit = 0.0
         self.__assimilation_shaded = 0.0
         self.__Leaf_Area_Index=0.005
-        self.__available_carbon = 0.03
+        self.__carbon_pool = 0.03
         self.__parameters = params_dict
         self.__thermal_age_increment = 0.0
-        self.latitude = 0
         self.carbon_assimilation = CarbonAssimilation(self.__parameters) # instantiate process objects to handle physiology. later - transpiration and nitrogen
         self.__resource_pools = []
-        self.carbon_allocation_queue = PriorityQueue(
-            get_priority =lambda rp: rp.growth_allocation_priority ) # creating a priority queue instance for carbon allocation based on the RP's carbon_allocation_priority attribute
-
+        self.priority_queue = None
 
     def create_resource_pools(self):
-        for rp in self.resource_pool_params:
-            rp_obj = ResourcePool(
+        """
+        Create resource pool objects based on resource pool parameters
+        """
+        self.__resource_pools = [
+            ResourcePool(
                 name=rp['name'],
                 thermal_time_initiation=rp['thermal_time_initiation'],
+                growth_allocation_priority=rp['growth_allocation_priority'],
                 max_size=rp['max_size'],
                 initial_size=rp['initial_size'],
-                growth_rate=rp['rate'],
-                growth_allocation_priority=rp['growth_allocation_priority'],
-                #maintenance_allocation_priority=rp['maintenance_allocation_priority'],
-                #CN_ratio=rp['CN_ratio']
-            )
-            self.__resource_pools.append(rp_obj)
-            # Also add each pool to the priority queue
-            self.carbon_allocation_queue.add_item(rp_obj)
-    
-    
+                growth_rate=rp['rate']
+            ) for rp in self.resource_pool_params
+        ]
+        self.priority_queue = PriorityQueue(self.__resource_pools)
 
     def update_thermal_age(self, environmental_variables):
         """
-        Computes thermal age increment and updates plant thermal age, 
-        plant thermal age increment and RP initiation status
+        Computes thermal age increment and updates thermal age
+        Returns thermal age increment to be used by resource pool
         """
         thermal_age_increment = (environmental_variables['temperature'] - self.__parameters['Base_temperature'])/24 # thermal age increase hour basis
         if thermal_age_increment < 0:
@@ -537,24 +738,24 @@ class Plant:
         # update thermal age and increment
         self.__thermal_age += thermal_age_increment
         self.__thermal_age_increment = thermal_age_increment
-        # update initiation status of resource pools
+        #update initiation status of resource pools
         for rp in self.__resource_pools:
             rp.update_initiation_status(self.__thermal_age)
-    
 
     def carry_out_photosynthesis(self, environmental_variables):
       """
       Carry out photosynthesis for sunlit and shaded components of the canopy
       in units of µmol CO₂ m⁻²leaf area s⁻¹ 
       """
-      Sunlit_Fraction = environmental_variables['Sunlit_fraction']
+      #Sunlit_Fraction = environmental_variables['Sunlit_fraction']
       self.__assimilation_sunlit, self.__assimilation_shaded = self.carbon_assimilation.sunlit_shaded_photosynthesis(environmental_variables)
 
-    def update_available_carbon(self, environmental_variables):
+
+    def compute_carbon_assimilated(self, environmental_variables):
       """
       Calculates average canopy assimilation based on sunlit and shaded fractions
-      and uses it to update total plant available carbon.
-      Since assimilation is computed on a per leaf area basis, need to multiply
+      and uses it to compute total carbon assimilated by the plant in current timestep.
+      Since assimilation was converted to a per leaf area basis, need to multiply
       by LAI and single plant ground area to get per plant basis.
 
       Canopy_total_carbon_assimilated *= single_plant_ground_area *= leaf_area_index
@@ -566,26 +767,15 @@ class Plant:
       Canopy_total_carbon_assimilated = Canopy_Photosynthesis_average * 3600 * self.__Leaf_Area_Index # In units µmol CO₂ m⁻² ground area for this timestep (hour)
       Canopy_total_carbon_assimilated *= (1E-6) * 12  # In units g carbon m⁻² ground area; (12 g carbon per mol CO₂ )
       Canopy_total_carbon_assimilated *= self.__parameters['Single_plant_ground_area'] # in units g C on a plant basis
-      self.__available_carbon += Canopy_total_carbon_assimilated
+      self.__carbon_pool += Canopy_total_carbon_assimilated
+      
+    
+    def carry_out_growth_resource_allocation(self):
+        """
+        Allocates growth resources using the priority queue.
+        """
+        self.__carbon_pool = self.priority_queue.allocate_growth_resources(self.__carbon_pool, self.__thermal_age, self.__thermal_age_increment)
 
-
-    def allocate_carbon(self, environmental_variables):
-
-        # then use priority queue to distribute growth resources 
-        def demand_func(rp):
-            return rp.compute_growth_demand(self.__thermal_age, self.__thermal_age_increment)
-
-        def allocate_func(rp, amount):
-            rp.receive_growth_allocation(amount)
-
-        leftover = self.carbon_allocation_queue.allocate_resource(
-            total_resource=self.__available_carbon,
-            demand_func=demand_func,
-            allocate_func=allocate_func
-        )
-        self.__available_carbon = leftover
-        
-        
 
     def update_leaf_area_index(self):
       """
@@ -601,8 +791,8 @@ class Plant:
       """
       self.update_thermal_age(environmental_variables)
       self.carry_out_photosynthesis(environmental_variables)
-      self.update_available_carbon(environmental_variables)
-      self.allocate_carbon(environmental_variables)
+      self.compute_carbon_assimilated(environmental_variables)
+      self.carry_out_growth_resource_allocation()
       self.update_leaf_area_index()
 
     # getter functions
@@ -615,8 +805,11 @@ class Plant:
     def get_assimilation_shaded(self):
         return self.__assimilation_shaded
 
-    def get_available_carbon(self):
-        return self.__available_carbon
+    def get_carbon_pool(self):
+        return self.__carbon_pool
+
+    def get_parameters(self):
+        return self.__parameters
 
     def get_resource_pools(self):
         return self.__resource_pools
@@ -629,6 +822,9 @@ class Plant:
 
     def get_thermal_age(self):
         return self.__thermal_age
+
+    def get_resource_pools(self):
+        return self.__resource_pools
 
 #@title Resource pool class
 
@@ -650,7 +846,7 @@ class ResourcePool:
         self.initial_size = initial_size
         self.current_size = initial_size
         self.RP_thermal_age = 0.0
-        self.growth_demand = 0.0
+        self.demand = 0.0
 
         # for testing
         self.rgr = 0.0 ###### tracking this for testing. --> remove later
@@ -682,7 +878,7 @@ class ResourcePool:
         relative_growth_rate = f_prime / f
         return relative_growth_rate
 
-  def compute_growth_demand(self, plant_thermal_time, thermal_time_increment):  ## renamed 
+  def compute_demand(self, plant_thermal_time, thermal_time_increment):
         """
         Demand by the resource pool is computed by the potential growth increment based on
         thermal age of the resource pool and the thermal time increment from the previous timestep.
@@ -692,12 +888,11 @@ class ResourcePool:
             self.RP_thermal_age = 0
         relative_growth_rate = self.compute_relative_growth_rate(self.RP_thermal_age, self.max_size, self.initial_size, self.growth_rate)
         self.rgr = relative_growth_rate ###### tracking this for testing. --> remove later
-        growth_demand = relative_growth_rate * self.current_size * thermal_time_increment
-        self.growth_demand = growth_demand
-        # currently assumes that this is all directly related to carbon; later can adjust so C demand (and later N) is based on a proportion of total biomass
-        return growth_demand
+        demand = relative_growth_rate * self.current_size * thermal_time_increment
+        self.demand = demand
+        return demand
 
-  def receive_growth_allocation(self, allocated_carbon):  ## renamed function -> need to modify so that size is updated from adding sum(C, N)
+  def receive_carbon(self, allocated_carbon):
         """
         Increment the resource pool based on allocation from the plant
         """
