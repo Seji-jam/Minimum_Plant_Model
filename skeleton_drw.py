@@ -662,10 +662,11 @@ class PriorityQueue:
     """
     This class represents a priority queue used for resource allocation.
     """
-    def __init__(self, resource_pools):
+    def __init__(self, resource_pools, resource_demand_function):
         self.resource_pools = resource_pools
+        self.resource_demand_function = resource_demand_function # specifies the demand function (whether growth or  maintenance)
 
-    def allocate_growth_resources(self, carbon_pool, nitrogen_pool, thermal_age, thermal_age_increment):
+    def allocate_resources(self, carbon_pool, nitrogen_pool, thermal_age, thermal_age_increment):
         """
         Allocates growth resources to resource pools from the plant carbon pool.
         """
@@ -673,7 +674,7 @@ class PriorityQueue:
         # Compute resource pool demand
         carbon_demands = {}
         for rp in initiated_rps:
-            carbon_demand = rp.compute_growth_demand(thermal_age, thermal_age_increment)[0]
+            carbon_demand = self.resource_demand_function(rp, thermal_age, thermal_age_increment)[0]
             carbon_demands[rp] = carbon_demand
         sorted_rps = sorted(initiated_rps, key=lambda x: x.growth_allocation_priority)
         for rp in sorted_rps:
@@ -702,7 +703,8 @@ class Plant:
         self.__thermal_age_increment = 0.0
         self.carbon_assimilation = CarbonAssimilation(self.__parameters) # instantiate process objects to handle physiology. later - transpiration and nitrogen
         self.__resource_pools = []
-        self.priority_queue = None
+        self.growth_priority_queue = None
+        self.maintenance_priority_queue = None 
 
     def create_resource_pools(self):
         """
@@ -718,7 +720,8 @@ class Plant:
                 growth_rate=rp['rate']
             ) for rp in self.resource_pool_params
         ]
-        self.priority_queue = PriorityQueue(self.__resource_pools)
+        self.growth_priority_queue = PriorityQueue(self.__resource_pools, ResourcePool.compute_growth_demand) # specifies to use the growth demand function
+        #self.maintenance_priority_queue = PriorityQueue(self.__resource_pools, ResourcePool.compute_maintenance_demand) ## PLACEHOLDER
 
     def update_thermal_age(self, environmental_variables):
         """
@@ -744,10 +747,10 @@ class Plant:
       self.__assimilation_sunlit, self.__assimilation_shaded = self.carbon_assimilation.sunlit_shaded_photosynthesis(environmental_variables)
 
 
-    def compute_carbon_assimilated(self, environmental_variables):
+    def update_carbon_pool(self, environmental_variables):
       """
       Calculates average canopy assimilation based on sunlit and shaded fractions
-      and uses it to compute total carbon assimilated by the plant in current timestep.
+      and uses it to update the total plant carbon pool.
       Since assimilation was converted to a per leaf area basis, need to multiply
       by LAI and single plant ground area to get per plant basis.
 
@@ -767,7 +770,7 @@ class Plant:
         """
         Allocates growth resources using the priority queue.
         """
-        self.__carbon_pool, self.__nitrogen_pool = self.priority_queue.allocate_growth_resources(self.__carbon_pool, self.__nitrogen_pool, self.__thermal_age, self.__thermal_age_increment)
+        self.__carbon_pool, self.__nitrogen_pool = self.growth_priority_queue.allocate_resources(self.__carbon_pool, self.__nitrogen_pool, self.__thermal_age, self.__thermal_age_increment)
 
     def update_leaf_area_index(self):
       """
@@ -783,7 +786,7 @@ class Plant:
       """
       self.update_thermal_age(environmental_variables)
       self.carry_out_photosynthesis(environmental_variables)
-      self.compute_carbon_assimilated(environmental_variables)
+      self.update_carbon_pool(environmental_variables)
       #self.carry_out_maintenance_allocation()
       self.carry_out_growth_allocation()
       self.update_leaf_area_index()
@@ -884,6 +887,13 @@ class ResourcePool:
         carbon_demand = total_demand
         nitrogen_demand = 0
         return carbon_demand, nitrogen_demand
+
+  def compute_maintenance_demand(self):
+      """
+      For now, just assumes it is 1% of total RP size, can make this more specific later
+      """
+      return self.current_size * 0.01
+      
 
   def receive_growth_allocation(self, allocated_carbon, allocated_nitrogen):  
         """
