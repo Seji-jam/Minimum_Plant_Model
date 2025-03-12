@@ -103,7 +103,7 @@ class ModelHandler:
         self.log_thermal_age.append(plant_instance.get_thermal_age())
         self.log_lai.append(plant_instance.get_leaf_area_index())
         self.log_rp.append(plant_instance.get_resource_pools()[0].current_size)
-        self.log_rp_demand.append(plant_instance.get_resource_pools()[0].demand)
+        self.log_rp_demand.append(plant_instance.get_resource_pools()[0].growth_demand)
         self.log_rp_rgr.append(plant_instance.get_resource_pools()[0].rgr)
         self.log_carbon_pool.append(plant_instance.get_carbon_pool())
         # update resource pools sizes for any number of resource pools
@@ -505,7 +505,7 @@ class Plant:
         self.carbon_assimilation = CarbonAssimilation(self.__parameters) # instantiate process objects to handle physiology. later - transpiration and nitrogen
         self.__resource_pools = []
         self.carbon_allocation_queue = PriorityQueue(
-            get_priority =lambda rp: rp.carbon_allocation_priority ) # creating a priority queue instance for carbon allocation based on the RP's carbon_allocation_priority attribute
+            get_priority =lambda rp: rp.growth_allocation_priority ) # creating a priority queue instance for carbon allocation based on the RP's carbon_allocation_priority attribute
 
 
     def create_resource_pools(self):
@@ -516,7 +516,7 @@ class Plant:
                 max_size=rp['max_size'],
                 initial_size=rp['initial_size'],
                 growth_rate=rp['rate'],
-                carbon_allocation_priority=rp['carbon_allocation_priority']
+                growth_allocation_priority=rp['carbon_allocation_priority'] 
             )
             self.__resource_pools.append(rp_obj)
             # Also add each pool to the priority queue
@@ -569,12 +569,12 @@ class Plant:
         for rp in self.__resource_pools:
             rp.update_initiation_status(self.__thermal_age)
 
-        # then use priority queue to distribute carbon
+        # then use priority queue to distribute growth resources 
         def demand_func(rp):
-            return rp.compute_carbon_demand(self.__thermal_age, self.__thermal_age_increment)
+            return rp.compute_growth_demand(self.__thermal_age, self.__thermal_age_increment)
 
         def allocate_func(rp, amount):
-            rp.receive_carbon(amount)
+            rp.receive_growth_allocation(amount)
 
         leftover = self.carbon_allocation_queue.allocate_resource(
             total_resource=self.__carbon_pool,
@@ -644,17 +644,17 @@ class ResourcePool:
   the model to run is simply one. In the current model structure, the first RP is assumed to
   represent total leaves (due to LAI being calculated from this RP).
   """
-  def __init__(self, name, thermal_time_initiation, carbon_allocation_priority, max_size, initial_size, growth_rate):
+  def __init__(self, name, thermal_time_initiation, growth_allocation_priority, max_size, initial_size, growth_rate):
         self.name = name
         self.is_initiated = False
         self.thermal_time_initiation = thermal_time_initiation
-        self.carbon_allocation_priority = carbon_allocation_priority
+        self.growth_allocation_priority = growth_allocation_priority
         self.max_size = max_size
         self.growth_rate = growth_rate
         self.initial_size = initial_size
         self.current_size = initial_size
         self.RP_thermal_age = 0.0
-        self.demand = 0.0
+        self.growth_demand = 0.0
 
         # for testing
         self.rgr = 0.0 ###### tracking this for testing. --> remove later
@@ -686,7 +686,7 @@ class ResourcePool:
         relative_growth_rate = f_prime / f
         return relative_growth_rate
 
-  def compute_carbon_demand(self, plant_thermal_time, thermal_time_increment):
+  def compute_growth_demand(self, plant_thermal_time, thermal_time_increment):  ## renamed 
         """
         Demand by the resource pool is computed by the potential growth increment based on
         thermal age of the resource pool and the thermal time increment from the previous timestep.
@@ -696,12 +696,12 @@ class ResourcePool:
             self.RP_thermal_age = 0
         relative_growth_rate = self.compute_relative_growth_rate(self.RP_thermal_age, self.max_size, self.initial_size, self.growth_rate)
         self.rgr = relative_growth_rate ###### tracking this for testing. --> remove later
-        demand = relative_growth_rate * self.current_size * thermal_time_increment
-        self.demand = demand
+        growth_demand = relative_growth_rate * self.current_size * thermal_time_increment
+        self.growth_demand = growth_demand
         # currently assumes that this is all directly related to carbon; later can adjust so C demand (and later N) is based on a proportion of total biomass
-        return demand
+        return growth_demand
 
-  def receive_carbon(self, allocated_carbon):
+  def receive_growth_allocation(self, allocated_carbon):  ## renamed function -> need to modify so that size is updated from adding sum(C, N)
         """
         Increment the resource pool based on allocation from the plant
         """
