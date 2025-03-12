@@ -74,7 +74,7 @@ class ModelHandler:
         plt.show()
 
         # Plotting available C
-        plt.plot(self.log_thermal_age, self.log_carbon_pool, linestyle='-')
+        plt.plot(self.log_thermal_age, self.log_available_carbon, linestyle='-')
         plt.xlabel('thermal time (deg day)')
         plt.ylabel('carbon pool')
         plt.grid(True)
@@ -95,7 +95,7 @@ class ModelHandler:
         self.log_rp = []
         self.log_rp_demand = []
         self.log_rp_rgr = []
-        self.log_carbon_pool = []
+        self.log_available_carbon = []
         self.log_resource_pool_sizes = {rp.name: [] for rp in plant_instance.get_resource_pools()}
 
     def update_logs(self, plant_instance):
@@ -105,7 +105,7 @@ class ModelHandler:
         self.log_rp.append(plant_instance.get_resource_pools()[0].current_size)
         self.log_rp_demand.append(plant_instance.get_resource_pools()[0].growth_demand)
         self.log_rp_rgr.append(plant_instance.get_resource_pools()[0].rgr)
-        self.log_carbon_pool.append(plant_instance.get_carbon_pool())
+        self.log_available_carbon.append(plant_instance.get_available_carbon())
         # update resource pools sizes for any number of resource pools
         for rp in plant_instance.get_resource_pools():
           self.log_resource_pool_sizes[rp.name].append(rp.current_size)
@@ -498,7 +498,7 @@ class Plant:
         self.__assimilation_sunlit = 0.0
         self.__assimilation_shaded = 0.0
         self.__Leaf_Area_Index=0.005
-        self.__carbon_pool = 0.03
+        self.__available_carbon = 0.03
         self.__parameters = params_dict
         self.__thermal_age_increment = 0.0
         self.latitude = 0
@@ -516,19 +516,20 @@ class Plant:
                 max_size=rp['max_size'],
                 initial_size=rp['initial_size'],
                 growth_rate=rp['rate'],
-                growth_allocation_priority=rp['carbon_allocation_priority'] 
+                growth_allocation_priority=rp['growth_allocation_priority'],
+                #maintenance_allocation_priority=rp['maintenance_allocation_priority'],
+                #CN_ratio=rp['CN_ratio']
             )
             self.__resource_pools.append(rp_obj)
             # Also add each pool to the priority queue
             self.carbon_allocation_queue.add_item(rp_obj)
     
     
-    
 
     def update_thermal_age(self, environmental_variables):
         """
-        Computes thermal age increment and updates thermal age
-        Returns thermal age increment to be used by resource pool
+        Computes thermal age increment and updates plant thermal age, 
+        plant thermal age increment and RP initiation status
         """
         thermal_age_increment = (environmental_variables['temperature'] - self.__parameters['Base_temperature'])/24 # thermal age increase hour basis
         if thermal_age_increment < 0:
@@ -536,6 +537,10 @@ class Plant:
         # update thermal age and increment
         self.__thermal_age += thermal_age_increment
         self.__thermal_age_increment = thermal_age_increment
+        # update initiation status of resource pools
+        for rp in self.__resource_pools:
+            rp.update_initiation_status(self.__thermal_age)
+    
 
     def carry_out_photosynthesis(self, environmental_variables):
       """
@@ -545,10 +550,10 @@ class Plant:
       Sunlit_Fraction = environmental_variables['Sunlit_fraction']
       self.__assimilation_sunlit, self.__assimilation_shaded = self.carbon_assimilation.sunlit_shaded_photosynthesis(environmental_variables)
 
-    def compute_carbon_assimilated(self, environmental_variables):
+    def update_available_carbon(self, environmental_variables):
       """
       Calculates average canopy assimilation based on sunlit and shaded fractions
-      and uses it to compute total carbon assimilated by the plant in current timestep.
+      and uses it to update total plant available carbon.
       Since assimilation is computed on a per leaf area basis, need to multiply
       by LAI and single plant ground area to get per plant basis.
 
@@ -561,13 +566,10 @@ class Plant:
       Canopy_total_carbon_assimilated = Canopy_Photosynthesis_average * 3600 * self.__Leaf_Area_Index # In units µmol CO₂ m⁻² ground area for this timestep (hour)
       Canopy_total_carbon_assimilated *= (1E-6) * 12  # In units g carbon m⁻² ground area; (12 g carbon per mol CO₂ )
       Canopy_total_carbon_assimilated *= self.__parameters['Single_plant_ground_area'] # in units g C on a plant basis
-      self.__carbon_pool += Canopy_total_carbon_assimilated
+      self.__available_carbon += Canopy_total_carbon_assimilated
 
 
     def allocate_carbon(self, environmental_variables):
-        # first to update initiation status for resource pools
-        for rp in self.__resource_pools:
-            rp.update_initiation_status(self.__thermal_age)
 
         # then use priority queue to distribute growth resources 
         def demand_func(rp):
@@ -577,11 +579,11 @@ class Plant:
             rp.receive_growth_allocation(amount)
 
         leftover = self.carbon_allocation_queue.allocate_resource(
-            total_resource=self.__carbon_pool,
+            total_resource=self.__available_carbon,
             demand_func=demand_func,
             allocate_func=allocate_func
         )
-        self.__carbon_pool = leftover
+        self.__available_carbon = leftover
         
         
 
@@ -599,7 +601,7 @@ class Plant:
       """
       self.update_thermal_age(environmental_variables)
       self.carry_out_photosynthesis(environmental_variables)
-      self.compute_carbon_assimilated(environmental_variables)
+      self.update_available_carbon(environmental_variables)
       self.allocate_carbon(environmental_variables)
       self.update_leaf_area_index()
 
@@ -613,11 +615,8 @@ class Plant:
     def get_assimilation_shaded(self):
         return self.__assimilation_shaded
 
-    def get_carbon_pool(self):
-        return self.__carbon_pool
-
-    def get_parameters(self):
-        return self.__parameters
+    def get_available_carbon(self):
+        return self.__available_carbon
 
     def get_resource_pools(self):
         return self.__resource_pools
@@ -630,9 +629,6 @@ class Plant:
 
     def get_thermal_age(self):
         return self.__thermal_age
-
-    def get_resource_pools(self):
-        return self.__resource_pools
 
 #@title Resource pool class
 
