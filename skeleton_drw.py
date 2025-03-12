@@ -59,12 +59,6 @@ class ModelHandler:
         plt.grid(True)
         plt.show()
 
-        # Plotting rp 1 demand
-        plt.plot(list(range(len(self.log_rp_demand))), self.log_rp_demand, linestyle='-')
-        plt.xlabel('Time Step')
-        plt.ylabel('rp demand')
-        plt.grid(True)
-        plt.show()
 
         # Plotting RGR (y-axis)
         plt.plot(self.log_thermal_age, self.log_rp_rgr, linestyle='-')
@@ -93,7 +87,6 @@ class ModelHandler:
         self.log_assimilation = []
         self.log_lai = []
         self.log_rp = []
-        self.log_rp_demand = []
         self.log_rp_rgr = []
         self.log_carbon_pool = []
         self.log_resource_pool_sizes = {rp.name: [] for rp in plant_instance.get_resource_pools()}
@@ -103,7 +96,6 @@ class ModelHandler:
         self.log_thermal_age.append(plant_instance.get_thermal_age())
         self.log_lai.append(plant_instance.get_leaf_area_index())
         self.log_rp.append(plant_instance.get_resource_pools()[0].current_size)
-        self.log_rp_demand.append(plant_instance.get_resource_pools()[0].demand)
         self.log_rp_rgr.append(plant_instance.get_resource_pools()[0].rgr)
         self.log_carbon_pool.append(plant_instance.get_carbon_pool())
         # update resource pools sizes for any number of resource pools
@@ -673,24 +665,24 @@ class PriorityQueue:
     def __init__(self, resource_pools):
         self.resource_pools = resource_pools
 
-    def allocate_growth_resources(self, carbon_pool, thermal_age, thermal_age_increment):
+    def allocate_growth_resources(self, carbon_pool, nitrogen_pool, thermal_age, thermal_age_increment):
         """
         Allocates growth resources to resource pools from the plant carbon pool.
         """
         initiated_rps = [rp for rp in self.resource_pools if rp.is_initiated]
         # Compute resource pool demand
-        demands = {}
-        total_demand = 0.0
+        carbon_demands = {}
         for rp in initiated_rps:
-            demand = rp.compute_demand(thermal_age, thermal_age_increment)
-            demands[rp] = demand
-            total_demand += demand
+            carbon_demand = rp.compute_growth_demand(thermal_age, thermal_age_increment)[0]
+            carbon_demands[rp] = carbon_demand
         sorted_rps = sorted(initiated_rps, key=lambda x: x.growth_allocation_priority)
         for rp in sorted_rps:
-            allocation = min(demands[rp], carbon_pool)
-            rp.receive_carbon(allocation)
-            carbon_pool -= allocation
-        return carbon_pool
+            carbon_allocation = min(carbon_demands[rp], carbon_pool)
+            nitrogen_allocation = 0.0 ## PLACEHOLDER
+            rp.receive_growth_allocation(carbon_allocation, nitrogen_allocation)
+            carbon_pool -= carbon_allocation
+            nitrogen_pool -= nitrogen_allocation
+        return carbon_pool, nitrogen_pool
 
 from typing_extensions import Self
 #@title Plant class
@@ -705,6 +697,7 @@ class Plant:
         self.__assimilation_shaded = 0.0
         self.__Leaf_Area_Index=0.005
         self.__carbon_pool = 0.03
+        self.__nitrogen_pool = 0.0  ### PLACEHOLDER
         self.__parameters = params_dict
         self.__thermal_age_increment = 0.0
         self.carbon_assimilation = CarbonAssimilation(self.__parameters) # instantiate process objects to handle physiology. later - transpiration and nitrogen
@@ -770,12 +763,11 @@ class Plant:
       self.__carbon_pool += Canopy_total_carbon_assimilated
       
     
-    def carry_out_growth_resource_allocation(self):
+    def carry_out_growth_allocation(self):
         """
         Allocates growth resources using the priority queue.
         """
-        self.__carbon_pool = self.priority_queue.allocate_growth_resources(self.__carbon_pool, self.__thermal_age, self.__thermal_age_increment)
-
+        self.__carbon_pool, self.__nitrogen_pool = self.priority_queue.allocate_growth_resources(self.__carbon_pool, self.__nitrogen_pool, self.__thermal_age, self.__thermal_age_increment)
 
     def update_leaf_area_index(self):
       """
@@ -792,7 +784,8 @@ class Plant:
       self.update_thermal_age(environmental_variables)
       self.carry_out_photosynthesis(environmental_variables)
       self.compute_carbon_assimilated(environmental_variables)
-      self.carry_out_growth_resource_allocation()
+      #self.carry_out_maintenance_allocation()
+      self.carry_out_growth_allocation()
       self.update_leaf_area_index()
 
     # getter functions
@@ -846,7 +839,6 @@ class ResourcePool:
         self.initial_size = initial_size
         self.current_size = initial_size
         self.RP_thermal_age = 0.0
-        self.demand = 0.0
 
         # for testing
         self.rgr = 0.0 ###### tracking this for testing. --> remove later
@@ -878,7 +870,7 @@ class ResourcePool:
         relative_growth_rate = f_prime / f
         return relative_growth_rate
 
-  def compute_demand(self, plant_thermal_time, thermal_time_increment):
+  def compute_growth_demand(self, plant_thermal_time, thermal_time_increment):
         """
         Demand by the resource pool is computed by the potential growth increment based on
         thermal age of the resource pool and the thermal time increment from the previous timestep.
@@ -888,15 +880,16 @@ class ResourcePool:
             self.RP_thermal_age = 0
         relative_growth_rate = self.compute_relative_growth_rate(self.RP_thermal_age, self.max_size, self.initial_size, self.growth_rate)
         self.rgr = relative_growth_rate ###### tracking this for testing. --> remove later
-        demand = relative_growth_rate * self.current_size * thermal_time_increment
-        self.demand = demand
-        return demand
+        total_demand = relative_growth_rate * self.current_size * thermal_time_increment
+        carbon_demand = total_demand
+        nitrogen_demand = 0
+        return carbon_demand, nitrogen_demand
 
-  def receive_carbon(self, allocated_carbon):
+  def receive_growth_allocation(self, allocated_carbon, allocated_nitrogen):  
         """
         Increment the resource pool based on allocation from the plant
         """
-        self.current_size += allocated_carbon
+        self.current_size += allocated_carbon + allocated_nitrogen
 
 #@title Example simulation
 #driver_file = 'https://raw.githubusercontent.com/DRWang3/MPM_testing/refs/heads/main/model%20input%20files/drivers_setpoints.csv'
