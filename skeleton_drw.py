@@ -778,8 +778,8 @@ class Plant:
       specific leaf area * size of the first resource pool
       RP 1 is considered to represent the total pool of leaves by default -> can change this later
       """
-      #self.__Leaf_Area_Index = self.__parameters['Specific_leaf_area'] * self.__resource_pools[0].current_size * 1/self.__parameters['Single_plant_ground_area']
-      self.__Leaf_Area_Index = 0.03 * self.__resource_pools[0].current_size * 1/self.__parameters['Single_plant_ground_area']
+      self.__Leaf_Area_Index = self.__parameters['Specific_leaf_area'] * self.__resource_pools[0].current_size * 1/self.__parameters['Single_plant_ground_area']
+      #self.__Leaf_Area_Index = 0.03 * self.__resource_pools[0].current_size * 1/self.__parameters['Single_plant_ground_area']
 
     def simulate_plant(self, environmental_variables):
       """
