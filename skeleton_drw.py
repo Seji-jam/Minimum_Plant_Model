@@ -674,7 +674,7 @@ class PriorityQueue:
         # Compute resource pool demand
         carbon_demands = {}
         for rp in initiated_rps:
-            carbon_demand = self.resource_demand_function(rp, thermal_age, thermal_age_increment)[0]
+            carbon_demand = self.resource_demand_function(rp, thermal_age, thermal_age_increment, rp.current_size)[0]
             carbon_demands[rp] = carbon_demand
         sorted_rps = sorted(initiated_rps, key=lambda x: x.growth_allocation_priority)
         for rp in sorted_rps:
