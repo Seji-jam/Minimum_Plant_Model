@@ -64,7 +64,7 @@ MPM_testing/
 ### 1  ·  Install
 
 ```bash
-git clone https://github.com/your‑user/MPM_testing.git
+git clone https://github.com/Seji-jam/MPM_testing.git
 cd MPM_testing
 pip install -e .[dev]     # editable + dev extras
 ```
@@ -77,7 +77,7 @@ python -m mpm.cli  testdata/MPM_driver.csv testdata/parameters_CC.csv testdata/R
 
 *Shows plots and writes `model_outputs.csv`.*
 
-Or from your own script:
+Or from the script:
 
 ```python
 from mpm.plant.model_handler import ModelHandler
@@ -137,7 +137,7 @@ A pool **knows its own logistic curve** and reports demand each time step.
 
 | You want to… | Do this |
 |--------------|---------|
-| Add a new organ (e.g. tubers) | Sub‑class `ResourcePool`, list it in your `resource_pools.csv`. |
+| Add a new organ (e.g. tubers) | Sub‑class `ResourcePool`, list it in the `resource_pools.csv`. |
 | Change allocation order mid‑season | Sub‑class `PriorityQueue`, swap the implementation in `Plant.create_resource_pools()`. |
 | Use LiDAR‑based LAI | Inject your own `leaf_area_index` after each step. |
 | Run at 30‑min steps | Change the drivers and time‑step loop – no model maths rely on 1 h. |
