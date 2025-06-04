@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: mpm
+Version: 0.1.0
+Summary: Modular Plant Model – daily and sub-daily crop C dynamics
+Author-email: "Diane Wang, Sajad Jamshidi, Bryan Runck" <sjamshi@purdue.edu>
+License-Expression: MIT
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: matplotlib

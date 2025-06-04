@@ -1,0 +1,27 @@
+mpm
+├── plant/
+│   ├── __init__.py
+│   ├── plant.py                # Plant orchestration
+│   ├── resource_pool.py
+│   ├── priority_queue.py
+│   └── carbon_assimilation.py
+├── environment/
+│   ├── __init__.py
+│   ├── atmosphere.py
+│   ├── base.py                 # Shared Environment super-class
+│   └── aboveground.py
+├── __init__.py                 # Re-exports high-level API
+├── cli.py                      # `python -m mpm …` entry-point
+├── data/                       # tiny demo CSVs (drivers, params, pools)
+│   └── …
+├── examples/
+│   └── run_simulation.py
+├── tests/
+│   ├── baseline/               # frozen CSV produced by the legacy file
+│   │   └── model_outputs.csv
+│   └── test_regression.py
+├── pyproject.toml
+├── README.md
+└── .github/
+    └── workflows/
+        └── python-package.yml
