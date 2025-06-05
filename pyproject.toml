@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Modular Plant Model – daily and sub-daily crop C dynamics"
 authors = [{name = "Diane Wang, Sajad Jamshidi, Bryan Runck", email = "sjamshi@purdue.edu"}]
 # old table form deprecated ⟹ use simple string
-license = "MIT"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = ["numpy", "pandas", "matplotlib"]
@@ -16,3 +15,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["mpm"]
+
+[project.license]
+text = "MIT"
