@@ -160,12 +160,7 @@ Add a GitHub Actions workflow:
 - run: pytest -q
 ```
 
----
 
-## 📗 Documentation Roadmap
-
-* **API Reference** generated via *pdoc* (planned)  
-* Tutorial notebooks: greenhouse vs. field, adding a fruit pool (planned)
 
 ---
 
