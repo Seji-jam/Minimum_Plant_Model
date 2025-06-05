@@ -18,9 +18,6 @@ dependencies    = ["numpy", "pandas", "matplotlib"]
 # 👉  PEP 621-style license table
 license = { text = "MIT" }
 
-# (optional) extras so `pip install .[dev]` works
-[project.optional-dependencies]
-dev = ["black", "pytest", "pre-commit"]
 
 [tool.setuptools.packages.find]
 where = ["mpm"]
