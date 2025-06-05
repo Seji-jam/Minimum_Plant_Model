@@ -16,5 +16,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["mpm"]
 
-[project.license]
-text = "MIT"
+
+[project]
+license = { text = "MIT" } 
