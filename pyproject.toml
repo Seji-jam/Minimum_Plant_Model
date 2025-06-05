@@ -1,21 +1,26 @@
-[project]
-name = "mpm"
-version = "0.1.0"
-description = "Modular Plant Model – daily and sub-daily crop C dynamics"
-authors = [{name = "Diane Wang, Sajad Jamshidi, Bryan Runck", email = "sjamshi@purdue.edu"}]
-# old table form deprecated ⟹ use simple string
-readme = "README.md"
-requires-python = ">=3.9"
-dependencies = ["numpy", "pandas", "matplotlib"]
-
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires      = ["setuptools>=79", "wheel"]   # 79+ understands the new schema
 build-backend = "setuptools.build_meta"
 
+[project]
+name            = "mpm"
+version         = "0.1.0"
+description     = "Modular Plant Model – daily and sub-daily crop C dynamics"
+authors = [
+  { name = "Diane Wang" },
+  { name = "Sajad Jamshidi", email = "sjamshi@purdue.edu" },
+  { name = "Bryan Runck" }
+]
+readme          = "README.md"
+requires-python = ">=3.9"
+dependencies    = ["numpy", "pandas", "matplotlib"]
+
+# 👉  PEP 621-style license table
+license = { text = "MIT" }
+
+# (optional) extras so `pip install .[dev]` works
+[project.optional-dependencies]
+dev = ["black", "pytest", "pre-commit"]
 
 [tool.setuptools.packages.find]
 where = ["mpm"]
-
-
-[project]
-license = { text = "MIT" } 
