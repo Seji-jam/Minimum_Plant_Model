@@ -1,6 +1,6 @@
 # Minimum Plant Model (MPM)
 
-> **A lightweight, **_re‑configurable_** physiological based you can adopt, fork, and extend**  
+> **A lightweight, **_re‑configurable_** physiological based can adopted, forked, and extended**  
 > The Minimum Plant Model (MPM) is a simulation framework for modeling plant growth and development under different environmental conditions. It simulates carbon assimilation, resource allocation, and growth of different plant components (resource pools) over time based on environmental drivers like temperature, radiation, and other climate variables.
 
 ---
