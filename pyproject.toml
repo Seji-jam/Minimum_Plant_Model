@@ -1,0 +1,23 @@
+[build-system]
+requires      = ["setuptools>=79", "wheel"]   # 79+ understands the new schema
+build-backend = "setuptools.build_meta"
+
+[project]
+name            = "mpm"
+version         = "0.1.0"
+description     = "Modular Plant Model – daily and sub-daily crop C dynamics"
+authors = [
+  { name = "Diane Wang" },
+  { name = "Sajad Jamshidi", email = "sjamshi@purdue.edu" },
+  { name = "Bryan Runck" }
+]
+readme          = "README.md"
+requires-python = ">=3.9"
+dependencies    = ["numpy", "pandas", "matplotlib"]
+
+# 👉  PEP 621-style license table
+license = { text = "MIT" }
+
+
+[tool.setuptools.packages.find]
+where = ["mpm"]

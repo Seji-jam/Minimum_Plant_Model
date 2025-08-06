@@ -1,0 +1,3 @@
+﻿name,thermal_time_initiation,max_size,initial_size,rate,growth_allocation_priority,maintenance_allocation_priority,CN_ratio
+RP1,0,27.42123019,0.013215724,0.004317336,1,1,30
+RP2,200,27.42123019,0.013215724,0.004317336,2,2,30

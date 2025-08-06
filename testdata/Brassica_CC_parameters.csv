@@ -1,0 +1,17 @@
+﻿Ambient_CO2,400,ppm
+Fraction_AboveGround_Carbon,0.65,definition of this?
+Specific_leaf_area,0.23, m2/gr
+Leaf_Blade_Angle,85,
+Activation_Energy_JMAX,48041.88,J/mol
+VCMAX,100,umol CO2 m-2 s-1
+JMAX,290,umol CO2 m-2 s-1
+Photosynthetic_Light_Response_Factor,0.7,what reference is this from?
+Base_temperature,0.96,base temperature for phenological development (deg C)
+Single_plant_ground_area,0.0035,m2; can be computed using inverse planting density
+start_DOY,122,
+greenhouse_mode,1,
+projectedArea_init,0.0035,
+leaf_len_to_width,1.2,
+leafNSCscalar,0.2,
+pot_mode,1,
+max_leaf_area,0.0038,m2
