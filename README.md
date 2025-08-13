@@ -1,41 +1,52 @@
 # Minimum Plant Model (MPM)
 
 > **A lightweight, **_re‑configurable_** physiological processed based model that can adopted, forked, and extended**  
-> The Minimum Plant Model (MPM) is a simulation framework for modeling plant growth and development under different environmental conditions. It simulates carbon assimilation, resource allocation, and growth of different plant components (resource pools) over time based on environmental drivers like temperature, radiation, and other climate variables.
+> The Minimum Plant Model (MPM) is a framework designed to simulate plant growth and development according to specific environmental conditions. It represents canopy photosynthesis, carbon assimilation, allocation, and the development of their organs through logistic growth curve. The architecture is designed to facilitate the repetition of simulations and the incorporation of new processes as required.
+
+---
+**Core Components**
+```text
+ carbon_pool ─┐                 ┌─► Leaf
+              │  (thermal age)  │
+              ├─► Priority Q ───┼─► Stem
+              │                 │
+              └─────────────────┴─► Root / Seed / …
+```
+
+1. Resource Pools (RPs)
+An RP represents a distinct anatomical compartment (e.g., a leaf cohort, stem, root order, storage organ).
+In summary each RP:
+ Initiates growth when the plant’s accumulated thermal time reaches a user-defined threshold.
+ Grows according to a three-parameter logistic function in its own thermal time.
+ Reports carbon demand at each time step as the product of its current biomass, instantaneous relative growth rate, and thermal time increment.
+
+2. Priority Queue (PQ)
+The PQ determines the order in which RPs receive carbon from a central pool:
+
+All initiated RPs enter the queue at each step.
+RPs are sorted by an allocation priority (defined by user); demand is met in order until the carbon pool is depleted.
+Priorities can be static or stage-dependent by subclassing the PQ.
+
+3. Environment Abstraction
+The Environment class encapsulates external drivers (e.g., air temperature, radiation, VPD, wind speed) and can include different subclasses depending on the plant environemnt (e.g., hydroponic). Such abstraction allows that aditional contexts (e.g., greenhouse, growth chamber) to be implemented without altering plant code.
+
+4. Photosynthesis
+Canopy carbon assimilation is computed using the biochemistry of Farquhar et al. (1980), scaled to the canopy via the sunlit–shaded leaf of De Pury and Farquhar (1997). Temperature dependencies of Vcmax and Jmax, together with a stomatal conductance model, are used to estimate intercellular CO₂ and net assimilation.
+
+
+
+## Input Structure
+MPM requires the following input files:
+
+1. Driver data: time series of environmental variables at the model time step 
+2. Global parameters: includes biophysical and physiological parameters of the plant
+3. Resource pool parameters: one row per RP, specifying logistic growth parameters (i.e., initiation time, growth rate, and allocation priority).
+
 
 ---
 
-## 🌱 Why another crop model?
 
-Conventional crop models are typically difficult to extend, codebase has not been optimally developed with hard wired a **fixed set of organs** (leaf, stem, root…)
-**MPM emphasizes on flexibility and modularity** It is a *base engine* that trades complexity for **flexibility**:
-
-| Design choice                 | What it means          |
-| ----------------------------- | ---------------------- |
-| **Priority‑queue allocation** | Carbon (and any nutrients) move through a queue – simply re‑order or re‑prioritise to create *new* architectures without touching core maths. |
-| **Pluggable _Resource Pools_**| Each organ is a class with its own logistic growth curve. |
-| **Environment abstraction**   | Above‑ and below‑ground conditions are objects. We can now swap a greenhouse light model for an outdoor PAR estimator, reuse the same plant code. |
-
-
-The goal: **Provide the smallest credible core** upon which we can layer
-canopy energy balance, water stress, genotype parameters, or a GUI – _without
-fork‑lift refactoring_.
-
----
-
-## ✨ Feature Highlights
-
-* 🍃 **Sunlit / shaded Farquhar photosynthesis** (absorbed‑PAR based).
-* 🌡️ **Thermal‑time growth** – logistic per organ, thermally integrated per plant.
-* 🔄 **Priority queue carbon allocation** configurable per growth stage or user rule.
-* 🧩 **Resource‑pool plug‑ins** – any number, any order, any parameter set.
-* 🏞️ **Environment wrappers** – drop‑in replacements for greenhouse, field, or growth‑chamber scenarios.
-* 🖼️ **Matplotlib quick‑look plots** + CSV export for downstream dashboards.
-* 🧪 **Regression‑test harness** – check parity with a baseline run.
-
----
-
-## 📦 Project Layout
+## Project Layout
 
 ```
 MPM_testing/
@@ -59,7 +70,7 @@ MPM_testing/
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1  ·  Install
 
@@ -94,75 +105,8 @@ pytest        # compares output to tests/baseline/model_outputs.csv
 
 ---
 
-## 🧬 Core Concepts
-
-### Priority Queue Allocation
-
-```text
- carbon_pool ─┐                 ┌─► Leaf
-              │  (thermal age)  │
-              ├─► Priority Q ───┼─► Stem
-              │                 │
-              └─────────────────┴─► Root / Seed / …
-```
-
-* Pools **enter** the queue once their initiation thermal time is reached.  
-* A simple `sorted()` call allocates C based on `growth_allocation_priority`.  
-* Override or subclass `PriorityQueue` for fancier rules (e.g. stage‑specific priorities, sink‑strength feedback).
-
-### Resource Pools
-
-```python
-ResourcePool(
-    name="L3",
-    thermal_time_initiation=120,  # °C·day
-    allocation_priority=1,        # low number ▶ high priority
-    max_size=1.2,                 # g C
-    initial_size=0.01,
-    rate=0.04                     # logistic r
-)
-```
-
-A pool **knows its own logistic curve** and reports demand each time step.
-
-### Environment Abstraction
-
-* `Atmosphere` → solar geometry only.  
-* `AbovegroundEnvironment` → light partitioning, PAR absorption.  
-* Want growth‑chamber pulses or PAR sensor data? Sub‑class `Environment` and feed it directly to the plant.
-
 ---
 
-## 🔧 Extending MPM
-
-| You want to… | Do this |
-|--------------|---------|
-| Add a new organ (e.g. tubers) | Sub‑class `ResourcePool`, list it in the `resource_pools.csv`. |
-| Change allocation order mid‑season | Sub‑class `PriorityQueue`, swap the implementation in `Plant.create_resource_pools()`. |
-| Use LiDAR‑based LAI | Inject your own `leaf_area_index` after each step. |
-| Run at 30‑min steps | Change the drivers and time‑step loop – no model maths rely on 1 h. |
-
-Because everything is **Python**, any object can be patched or subclassed without recompiling the core.
-
----
-
-## 🧪 Testing & CI
-
-A single `pytest` file (`tests/test_regression.py`) re‑runs MPM and compares
-numeric output against a frozen baseline with `numpy.allclose(atol=1e‑6)`.
-
-Add a GitHub Actions workflow:
-
-```yaml
-- uses: actions/setup-python@v5
-  with: {python-version: '3.11'}
-- run: pip install -e .[dev]
-- run: pytest -q
-```
-
-
-
----
 
 ## 📄 License
 
