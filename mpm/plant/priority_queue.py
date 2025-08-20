@@ -61,11 +61,13 @@ class PriorityQueue:
             carbon_demand = self.resource_demand_function(rp, thermal_age, thermal_age_increment, rp.current_size)[0]
             carbon_demands[rp] = carbon_demand
         sorted_rps = sorted(initiated_rps, key=lambda x: x.growth_allocation_priority)
+        allocation_info = {}
         for rp in sorted_rps:
             carbon_allocation = min(carbon_demands[rp], carbon_pool)
             nitrogen_allocation = 0.0  ## PLACEHOLDER
             rp.receive_growth_allocation(carbon_allocation, nitrogen_allocation)
             carbon_pool -= carbon_allocation
             nitrogen_pool -= nitrogen_allocation
-        return carbon_pool, nitrogen_pool
+            allocation_info[rp.name] = {"demand": carbon_demands[rp], "allocation": carbon_allocation}
+        return carbon_pool, nitrogen_pool, allocation_info
 

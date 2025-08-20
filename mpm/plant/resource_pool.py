@@ -66,7 +66,7 @@ class ResourcePool:
 
     # ------------------------------------------------------------------
     
-    
+    @staticmethod
     def compute_relative_growth_rate( RP_thermal_age: float, max_size: float, initial_size: float, growth_rate: float ) -> float:
         """
         Calculate relative growth rate for resource pool based on its thermal age.

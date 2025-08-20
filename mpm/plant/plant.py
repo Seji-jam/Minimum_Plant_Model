@@ -35,7 +35,7 @@ class Plant:
     """
     
 
-    def __init__(self, params: ParamsDict, rp_params: List[ParamsDict]) -> None:
+    def __init__(self, parameters: ParamsDict, resource_pool_params: List[ParamsDict]) -> None:
 
         """Initialize Plant object with parameters and resource pool specifications.
         
@@ -44,8 +44,8 @@ class Plant:
             resource_pool_params: List of parameters for resource pools
         """
 
-        self.params = params
-        self.rp_params = rp_params
+        self.parameters = parameters
+        self.resource_pool_params = resource_pool_params
 
         self.thermal_age = 0.0
         self.assimilation_sunlit = 0.0
@@ -55,9 +55,9 @@ class Plant:
         self.nitrogen_pool = 0.0
         self.thermal_age_increment = 0.0
 
-        self.carbon_assimilation = CarbonAssimilation(self.params)
+        self.carbon_assimilation = CarbonAssimilation(self.parameters)
         self.resource_pools: Vector[ResourcePool] = []
-        self.growth_queue: PriorityQueue | None = None
+        self.growth_priority_queue: PriorityQueue | None = None
         self.last_allocation_info: ParamsDict = {}
 
     # ------------------------------------------------------------------
@@ -73,11 +73,11 @@ class Plant:
                 initial_size=rp["initial_size"],
                 growth_rate=rp["rate"],
             )
-            for rp in self.rp_params
+            for rp in self.resource_pool_params
         ]
         # Initialize priority queues
-        self.growth_priority_queue = PriorityQueue(self.__resource_pools, ResourcePool.compute_growth_demand)
-        # self.maintenance_priority_queue = PriorityQueue(self.__resource_pools, ResourcePool.compute_maintenance_demand)  # PLACEHOLDER
+        self.growth_priority_queue = PriorityQueue(self.resource_pools, ResourcePool.compute_growth_demand)
+        # self.maintenance_priority_queue = PriorityQueue(self.resource_pools, ResourcePool.compute_maintenance_demand)  # PLACEHOLDER
         
 
     # ------------------------------------------------------------------
@@ -94,11 +94,11 @@ class Plant:
         """
         # Calculate thermal age increase on hourly basis
         
-        thermal_age_increment = max(0.0, (environmental_variables['temperature'] - self.__parameters['Base_temperature']) / 24 )  
+        thermal_age_increment = max(0.0, (environmental_variables['temperature'] - self.parameters['Base_temperature']) / 24 )  
             
         # Update thermal age and increment
-        self.__thermal_age += thermal_age_increment
-        self.__thermal_age_increment = thermal_age_increment
+        self.thermal_age += thermal_age_increment
+        self.thermal_age_increment = thermal_age_increment
 
         # Update initiation status before allocation
         for rp in self.resource_pools:
@@ -132,23 +132,23 @@ class Plant:
         
         # Calculate average photosynthesis rate weighted by sunlit and shaded fractions
         Canopy_Photosynthesis_average = (
-            self.__assimilation_sunlit * Sunlit_Fraction + 
-            self.__assimilation_shaded * (1 - Sunlit_Fraction)
+            self.assimilation_sunlit * Sunlit_Fraction + 
+            self.assimilation_shaded * (1 - Sunlit_Fraction)
         )  # Units: µmol CO₂ m⁻² s⁻¹ (leaf area basis)
 
         # Convert to total carbon assimilated
         # Step 1: Convert to ground area basis by multiplying by Leaf_Area_Index
         # Step 2: Convert from per second to per hour (3600 seconds)
-        Canopy_total_carbon_assimilated = Canopy_Photosynthesis_average * 3600 * self.__Leaf_Area_Index
+        Canopy_total_carbon_assimilated = Canopy_Photosynthesis_average * 3600 * self.Leaf_Area_Index
         
         # Step 3: Convert from µmol CO₂ to g carbon (1E-6 mol/µmol × 12 g C/mol CO₂)
         Canopy_total_carbon_assimilated *= (1E-6) * 12
         
         # Step 4: Convert from per m² ground to per plant basis
-        Canopy_total_carbon_assimilated *= self.__parameters['Single_plant_ground_area']
+        Canopy_total_carbon_assimilated *= self.parameters['Single_plant_ground_area']
         
         # Add assimilated carbon to the carbon pool
-        self.__carbon_pool += Canopy_total_carbon_assimilated
+        self.carbon_pool += Canopy_total_carbon_assimilated
 
     # ------------------------------------------------------------------
     def carry_out_growth_allocation(self) -> None:
@@ -157,13 +157,13 @@ class Plant:
         
         This implements the original allocation logic using PriorityQueue.
         """
-        if self.growth_queue is None:
+        if self.growth_priority_queue is None:
             raise RuntimeError("Resource pools not initialised")
         (
             self.carbon_pool,
             self.nitrogen_pool,
             self.last_allocation_info,
-        ) = self.growth_queue.allocate_resources(
+        ) = self.growth_priority_queue.allocate_resources(
             self.carbon_pool,
             self.nitrogen_pool,
             self.thermal_age,
@@ -179,13 +179,13 @@ class Plant:
         the size of the first resource pool (assumed to represent leaves),
         divided by the single plant ground area to convert to m²/m².
         """
-        Specific_leaf_area = self.params["Specific_leaf_area"]
+        Specific_leaf_area = self.parameters["Specific_leaf_area"]
         ## the carbon in all RPs that starts with L is considered as total leaves carbon
         leaf_carbon = sum(
             rp.current_size for rp in self.resource_pools if rp.name.lower().startswith("l")
         )
         leaf_area_m2 = Specific_leaf_area * leaf_carbon
-        Single_plant_ground_area = self.params["Single_plant_ground_area"]
+        Single_plant_ground_area = self.parameters["Single_plant_ground_area"]
         self.Leaf_Area_Index = leaf_area_m2 / Single_plant_ground_area
 
     # ------------------------------------------------------------------
@@ -210,12 +210,12 @@ class Plant:
     # Accessors ---------------------------------------------------------
     def get_parameters(self) -> ParamsDict:  
         """Get plant parameters dictionary."""
-        return self.params
+        return self.parameters
 
     def get_assimilation_sunlit(self) -> float:  
         """Get sunlit assimilation rate in µmol CO₂ m⁻² s⁻¹."""
         return (
-            self.assimilation_shaded if self.params.get("pot_mode", False) else self.assimilation_sunlit
+            self.assimilation_shaded if self.parameters.get("pot_mode", False) else self.assimilation_sunlit
         )
 
     def get_assimilation_shaded(self) -> float:  

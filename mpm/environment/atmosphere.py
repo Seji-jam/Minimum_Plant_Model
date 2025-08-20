@@ -42,7 +42,7 @@ class Atmosphere:
         self._lat = latitude
         self._doy = doy
         self._hour = hour
-        self._props: ParamsDict = {}
+        self.__atmospheric_properties_dict: ParamsDict = {}
 
     # ------------------------------------------------------------------
     def compute_atmospheric_properties(self) -> None:
