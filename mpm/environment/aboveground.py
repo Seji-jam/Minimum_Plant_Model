@@ -1,219 +1,219 @@
-from __future__ import annotations
+"""Aboveground Environment module for handling canopy light regime and other above-ground processes."""
 
+from __future__ import annotations
 import math
 from typing import Any, Dict, List, Tuple
-
 from .base import Environment
+import numpy as np
 
 Vector = List[float]
 ParamsDict = Dict[str, Any]
 
 
 class AbovegroundEnvironment(Environment):
-    """Light interception and associated helper methods."""
+    """
+    This subclass handles computations in the aboveground plant jacket.
+    
+    Currently, these procedures are all related to the canopy light regime.
+    The class implements calculations for solar radiation absorption by leaves
+    in sunlit and shaded fractions of the canopy.
+    
+    Attributes:
+        Inherits all attributes from Environment base class
+    """
 
     def __init__(self, exogenous_inputs: ParamsDict) -> None:
-        super().__init__(exogenous_inputs)
-        self._env_vars = exogenous_inputs.copy()
+        """
+        Initialize the AbovegroundEnvironment.
+        
+        Args:
+            exogenous_inputs (dict): Dictionary of external environmental inputs
+        """
+        super().__init__(exogenous_inputs)  # Call the initializer of the base class
+        self.__environmental_variables = exogenous_inputs.copy() # stores as 'environmental_variables' so interface variables can be added
 
-    # ---- optical helper coefficients (unchanged maths) ----------------
-    def kdr_coeff(self, solar_elev_sin: float, leaf_blade_angle: float) -> float:
-        solar_elev_angle = math.asin(solar_elev_sin)
-        if solar_elev_sin >= math.sin(leaf_blade_angle):
-            leaf_orient_avg = solar_elev_sin * math.cos(leaf_blade_angle)
+
+    def KDR_Coeff(self, Solar_Elev_Sin: float, Leaf_Blade_Angle: float) -> float:
+        """
+        Calculate direct beam extinction coefficient.
+        
+        The light interception and absorption is based on the de Wit, Goudriaan model (Beer-Lambert Law).
+        
+        Args:
+            Solar_Elev_Sin (float): Sine of solar elevation angle
+            Leaf_Blade_Angle (float): Leaf blade angle in radians
+            
+        Returns:
+            float: Direct beam extinction coefficient
+        """
+        Solar_Elev_Angle = np.arcsin(Solar_Elev_Sin)
+        if Solar_Elev_Sin >= np.sin(Leaf_Blade_Angle):
+            Leaf_Orientation_Avg = Solar_Elev_Sin * np.cos(Leaf_Blade_Angle)
         else:
-            leaf_orient_avg = (
-                2
-                / math.pi
-                * (
-                    solar_elev_sin
-                    * math.cos(leaf_blade_angle)
-                    * math.asin(math.tan(solar_elev_angle) / math.tan(leaf_blade_angle))
-                    + math.sqrt(math.sin(leaf_blade_angle) ** 2 - solar_elev_sin**2)
-                )
-            )
-        return leaf_orient_avg / solar_elev_sin
+            Leaf_Orientation_Avg = (2 / np.pi) * (Solar_Elev_Sin * np.cos(Leaf_Blade_Angle) * 
+                                                 np.arcsin(np.tan(Solar_Elev_Angle) / np.tan(Leaf_Blade_Angle)) + 
+                                                 ((np.sin(Leaf_Blade_Angle))**2 - Solar_Elev_Sin**2)**0.5)
 
-    def kdf_coeff(
-        self,
-        leaf_area_index: float,
-        leaf_blade_angle: float,
-        scattering_coeff: float,
-    ) -> float:
-        beam_15 = self.kdr_coeff(math.sin(15 * math.pi / 180.0), leaf_blade_angle)
-        beam_45 = self.kdr_coeff(math.sin(45 * math.pi / 180.0), leaf_blade_angle)
-        beam_75 = self.kdr_coeff(math.sin(75 * math.pi / 180.0), leaf_blade_angle)
-        diffuse_ext = -1 / leaf_area_index * math.log(
-            0.178
-            * math.exp(-beam_15 * math.sqrt(1.0 - scattering_coeff) * leaf_area_index)
-            + 0.514
-            * math.exp(-beam_45 * math.sqrt(1.0 - scattering_coeff) * leaf_area_index)
-            + 0.308
-            * math.exp(-beam_75 * math.sqrt(1.0 - scattering_coeff) * leaf_area_index)
-        )
-        return diffuse_ext
+        Direct_Beam_Ext_Coeff = Leaf_Orientation_Avg / Solar_Elev_Sin
+        return Direct_Beam_Ext_Coeff
 
-    def reflection_coeff(
-        self, leaf_scattering_coeff: float, direct_beam_ext_coeff: float
-    ) -> Tuple[float, float]:
-        scattered_beam_ext_coeff = direct_beam_ext_coeff * math.sqrt(1 - leaf_scattering_coeff)
-        horiz_leaf_phase_fn = (1 - math.sqrt(1 - leaf_scattering_coeff)) / (
-            1 + math.sqrt(1 - leaf_scattering_coeff)
-        )
-        canopy_beam_reflect_coeff = 1 - math.exp(
-            -2 * horiz_leaf_phase_fn * direct_beam_ext_coeff / (1 + direct_beam_ext_coeff)
-        )
-        return scattered_beam_ext_coeff, canopy_beam_reflect_coeff
+    def KDF_Coeff(self, Leaf_Area_Index, Leaf_Blade_Angle, Scattering_Coeff):
+        """
+        Calculate diffuse extinction coefficient.
+        
+        Args:
+            Leaf_Area_Index (float): Leaf area index
+            Leaf_Blade_Angle (float): Leaf blade angle in radians
+            Scattering_Coeff (float): Scattering coefficient
+            
+        Returns:
+            float: Diffuse extinction coefficient
+        """
+        Beam_Ext_Coeff_15 = self.KDR_Coeff(np.sin(15. * np.pi / 180.), Leaf_Blade_Angle)
+        Beam_Ext_Coeff_45 = self.KDR_Coeff(np.sin(45. * np.pi / 180.), Leaf_Blade_Angle)
+        Beam_Ext_Coeff_75 = self.KDR_Coeff(np.sin(75. * np.pi / 180.), Leaf_Blade_Angle)
 
-    def light_absorb(
-        self,
-        scattering_coeff: float,
-        direct_beam_ext_coeff: float,
-        scattered_beam_ext_coeff: float,
-        diffuse_ext_coeff: float,
-        canopy_beam_reflect_coeff: float,
-        canopy_diffuse_reflect_coeff: float,
-        incident_direct: float,
-        incident_diffuse: float,
-        leaf_area_index: float,
-    ) -> Tuple[float, float]:
-        total_canopy_abs = (
-            (1.0 - canopy_beam_reflect_coeff)
-            * incident_direct
-            * (1.0 - math.exp(-scattered_beam_ext_coeff * leaf_area_index))
-            + (1.0 - canopy_diffuse_reflect_coeff)
-            * incident_diffuse
-            * (1.0 - math.exp(-diffuse_ext_coeff * leaf_area_index))
+        Diffuse_Ext_Coeff = -1 / Leaf_Area_Index * np.log(
+            0.178 * np.exp(-Beam_Ext_Coeff_15 * (1.0 - Scattering_Coeff)**0.5 * Leaf_Area_Index) +
+            0.514 * np.exp(-Beam_Ext_Coeff_45 * (1.0 - Scattering_Coeff)**0.5 * Leaf_Area_Index) +
+            0.308 * np.exp(-Beam_Ext_Coeff_75 * (1.0 - Scattering_Coeff)**0.5 * Leaf_Area_Index)
         )
-        absorbed_sunlit = (
-            (1 - scattering_coeff)
-            * incident_direct
-            * (1 - math.exp(-direct_beam_ext_coeff * leaf_area_index))
-            + (1 - canopy_diffuse_reflect_coeff)
-            * incident_diffuse
-            / (diffuse_ext_coeff + direct_beam_ext_coeff)
-            * diffuse_ext_coeff
-            * (
-                1
-                - math.exp(
-                    -(diffuse_ext_coeff + direct_beam_ext_coeff) * leaf_area_index
-                )
-            )
-            + incident_direct
-            * (
-                (1 - canopy_beam_reflect_coeff)
-                / (scattered_beam_ext_coeff + direct_beam_ext_coeff)
-                * scattered_beam_ext_coeff
-                * (
-                    1
-                    - math.exp(
-                        -(scattered_beam_ext_coeff + direct_beam_ext_coeff) * leaf_area_index
-                    )
-                )
-                - (1 - scattering_coeff)
-                * (1 - math.exp(-2 * direct_beam_ext_coeff * leaf_area_index))
-                / 2
+        return Diffuse_Ext_Coeff
+
+    def REFLECTION_Coeff(self, Leaf_Scattering_Coeff, Direct_Beam_Ext_Coeff):
+        """Calculate reflection coefficients.
+        
+        Args:
+            Leaf_Scattering_Coeff (float): Leaf scattering coefficient
+            Direct_Beam_Ext_Coeff (float): Direct beam extinction coefficient
+            
+        Returns:
+            tuple: (Scattered_Beam_Ext_Coeff, Canopy_Beam_Reflect_Coeff)
+        """
+        Scattered_Beam_Ext_Coeff = Direct_Beam_Ext_Coeff * (1 - Leaf_Scattering_Coeff)**0.5
+        Horizontal_Leaf_Phase_Function = (1 - (1 - Leaf_Scattering_Coeff)**0.5) / (1 + (1 - Leaf_Scattering_Coeff)**0.5)
+        Canopy_Beam_Reflect_Coeff = 1 - np.exp(-2 * Horizontal_Leaf_Phase_Function * Direct_Beam_Ext_Coeff / (1 + Direct_Beam_Ext_Coeff))
+        return Scattered_Beam_Ext_Coeff, Canopy_Beam_Reflect_Coeff
+
+
+    def LIGHT_ABSORB(self, Scattering_Coeff, Direct_Beam_Ext_Coeff, Scattered_Beam_Ext_Coeff, 
+                    Diffuse_Ext_Coeff, Canopy_Beam_Reflect_Coeff, Canopy_Diffuse_Reflect_Coeff, 
+                    Incident_Direct_Beam_Rad, Incident_Diffuse_Rad, Leaf_Area_Index):
+        """
+        Calculate absorbed light by sunlit and shaded components.
+        
+        Args:
+            Scattering_Coeff (float): Leaf scattering coefficient
+            Direct_Beam_Ext_Coeff (float): Direct beam extinction coefficient
+            Scattered_Beam_Ext_Coeff (float): Scattered beam extinction coefficient 
+            Diffuse_Ext_Coeff (float): Diffuse extinction coefficient
+            Canopy_Beam_Reflect_Coeff (float): Canopy beam reflection coefficient
+            Canopy_Diffuse_Reflect_Coeff (float): Canopy diffuse reflection coefficient
+            Incident_Direct_Beam_Rad (float): Direct beam radiation incident on canopy
+            Incident_Diffuse_Rad (float): Diffuse radiation incident on canopy
+            Leaf_Area_Index (float): Leaf area index
+            
+        Returns:
+            tuple: (Absorbed_Sunlit_Rad, Absorbed_Shaded_Rad)
+        """
+        Total_Canopy_Absorbed_Light = (
+            (1. - Canopy_Beam_Reflect_Coeff) * Incident_Direct_Beam_Rad * 
+            (1. - np.exp(-Scattered_Beam_Ext_Coeff * Leaf_Area_Index)) + 
+            (1. - Canopy_Diffuse_Reflect_Coeff) * Incident_Diffuse_Rad * 
+            (1. - np.exp(-Diffuse_Ext_Coeff * Leaf_Area_Index))
+        )
+
+        Absorbed_Sunlit_Rad = (
+            (1 - Scattering_Coeff) * Incident_Direct_Beam_Rad * (1 - np.exp(-Direct_Beam_Ext_Coeff * Leaf_Area_Index)) + 
+            (1 - Canopy_Diffuse_Reflect_Coeff) * Incident_Diffuse_Rad / (Diffuse_Ext_Coeff + Direct_Beam_Ext_Coeff) * 
+            Diffuse_Ext_Coeff * (1 - np.exp(-(Diffuse_Ext_Coeff + Direct_Beam_Ext_Coeff) * Leaf_Area_Index)) + 
+            Incident_Direct_Beam_Rad * (
+                (1 - Canopy_Beam_Reflect_Coeff) / (Scattered_Beam_Ext_Coeff + Direct_Beam_Ext_Coeff) * 
+                Scattered_Beam_Ext_Coeff * (1 - np.exp(-(Scattered_Beam_Ext_Coeff + Direct_Beam_Ext_Coeff) * Leaf_Area_Index)) - 
+                (1 - Scattering_Coeff) * (1 - np.exp(-2 * Direct_Beam_Ext_Coeff * Leaf_Area_Index)) / 2
             )
         )
-        absorbed_shaded = total_canopy_abs - absorbed_sunlit
-        return absorbed_sunlit, absorbed_shaded
 
-    # ---- public interface ---------------------------------------------
-    def compute_canopy_light_environment(
-        self,
-        *,
-        Leaf_Blade_Angle: float,
-        Leaf_Area_Index: float,
-        direct_par_input: float | None = None,
-        absorbed_par_input: float | None = None,
-        greenhouse_mode: bool = False,
-    ) -> None:
-        """Populate ``self._env_vars`` with absorbed PAR etc."""
+        Absorbed_Shaded_Rad = Total_Canopy_Absorbed_Light - Absorbed_Sunlit_Rad
+        return Absorbed_Sunlit_Rad, Absorbed_Shaded_Rad
 
-        scatter_coeff_par = 0.20
-        canopy_diffuse_reflect_par = 0.057
 
-        # --- choose correct incoming PAR signal ------------------------
-        incoming_par = (
-            direct_par_input
-            if direct_par_input is not None
-            else 0.5 * self.exogenous_inputs["radiation"]
-        )
+    def compute_canopy_light_environment(self, Leaf_Blade_Angle, Leaf_Area_Index):
+        """Compute the canopy light environment.
+        
+        The details of Sun/shade model are from:
+        De Pury & Farquhar (1997) Simple scaling of photosynthesis from leaves to canopies
+        The calculation of direct and diffused radiation within the canopy are from:
+        Spitters (1986) Separating the diffuse and direct component of global radiation
+        
+        Args:
+            Leaf_Blade_Angle (float): Leaf blade angle in degrees
+            Leaf_Area_Index (float): Leaf area index
+        """
+        # constants needed for computation
+        Scattering_Coefficient_PAR = 0.2  # Leaf scattering coefficient for PAR
+        Canopy_Diffuse_Reflection_Coefficient_PAR = 0.057  # Canopy diffuse PAR reflection coefficient
 
-        sin_beam = self.exogenous_inputs["Sin_Beam"]
-        solar_const = self.exogenous_inputs["Solar_Constant"]
+        Incoming_PAR = 0.5 * self.exogenous_inputs['radiation']
+        Atmospheric_Transmissivity = Incoming_PAR / (0.5 * self.exogenous_inputs['Solar_Constant'] * self.exogenous_inputs['Sin_Beam'])
 
-        if greenhouse_mode:
-            diffuse_par = incoming_par
-            direct_par = 0.0
+        if Atmospheric_Transmissivity < 0.22:
+            Diffuse_Light_Fraction = 1
+        elif 0.22 < Atmospheric_Transmissivity <= 0.35:
+            Diffuse_Light_Fraction = 1 - 6.4 * (Atmospheric_Transmissivity - 0.22) ** 2
         else:
-            at = incoming_par / (0.5 * solar_const * sin_beam)
-            if at < 0.22:
-                diff_frac = 1.0
-            elif at <= 0.35:
-                diff_frac = 1 - 6.4 * (at - 0.22) ** 2
-            else:
-                diff_frac = 1.47 - 1.66 * at
-            diff_frac = max(diff_frac, 0.15 + 0.85 * (1 - math.exp(-0.1 / sin_beam)))
+            Diffuse_Light_Fraction = 1.47 - 1.66 * Atmospheric_Transmissivity
 
-            diffuse_par = incoming_par * diff_frac
-            direct_par = incoming_par - diffuse_par
+        Diffuse_Light_Fraction = max(Diffuse_Light_Fraction, 0.15 + 0.85 * 
+                                    (1 - np.exp(-0.1 / self.exogenous_inputs['Sin_Beam'])))
 
-        # ---- optical coefficients ------------------------------------
-        leaf_angle_rad = math.radians(Leaf_Blade_Angle)
-        direct_ext = self.kdr_coeff(sin_beam, leaf_angle_rad)
-        diffuse_ext = self.kdf_coeff(Leaf_Area_Index, leaf_angle_rad, scatter_coeff_par)
-        scatter_ext, canopy_beam_reflect = self.reflection_coeff(scatter_coeff_par, direct_ext)
+        Diffuse_PAR = Incoming_PAR * Diffuse_Light_Fraction
+        Direct_PAR = Incoming_PAR - Diffuse_PAR
 
-        if greenhouse_mode:
-            sunlit_frac = 0.0
-            absorbed_par_sunlit = 0.0
-            canopy_total_abs = (
-                (1.0 - canopy_diffuse_reflect_par)
-                * diffuse_par
-                * (1.0 - math.exp(-diffuse_ext * Leaf_Area_Index))
-            )
-            absorbed_par_shaded = canopy_total_abs / Leaf_Area_Index
-        else:
-            (
-                absorbed_par_sunlit,
-                absorbed_par_shaded,
-            ) = self.light_absorb(
-                scatter_coeff_par,
-                direct_ext,
-                scatter_ext,
-                diffuse_ext,
-                canopy_beam_reflect,
-                canopy_diffuse_reflect_par,
-                direct_par,
-                diffuse_par,
-                Leaf_Area_Index,
-            )
-            sunlit_frac = (
-                1.0
-                / direct_ext
-                / Leaf_Area_Index
-                * (1.0 - math.exp(-direct_ext * Leaf_Area_Index))
-            )
-            absorbed_par_sunlit /= Leaf_Area_Index * sunlit_frac
-            absorbed_par_shaded /= Leaf_Area_Index * (1.0 - sunlit_frac)
+        Leaf_Blade_Angle_Radians = Leaf_Blade_Angle * np.pi / 180.
+        Direct_Beam_Extinction_Coefficient = self.KDR_Coeff(self.exogenous_inputs['Sin_Beam'], 
+                                                          Leaf_Blade_Angle_Radians)
+        Diffuse_Extinction_Coefficient_PAR = self.KDF_Coeff(Leaf_Area_Index, 
+                                                          Leaf_Blade_Angle_Radians, 
+                                                          Scattering_Coefficient_PAR)
 
-        # override with measured absorbed PAR if provided ----------------
-        if absorbed_par_input is not None and not math.isnan(absorbed_par_input):
-            sunlit_frac = 0.0
-            absorbed_par_sunlit = 0.0
-            absorbed_par_shaded = absorbed_par_input / max(Leaf_Area_Index, 1e-6)
+        Scattered_Beam_Extinction_Coefficient_PAR, Canopy_Beam_Reflection_Coefficient_PAR = self.REFLECTION_Coeff(
+            Scattering_Coefficient_PAR, Direct_Beam_Extinction_Coefficient)
 
-        self._env_vars.update(
-            {
-                "Absorbed_PAR_Sunlit": absorbed_par_sunlit,
-                "Absorbed_PAR_Shaded": absorbed_par_shaded,
-                "Sunlit_fraction": sunlit_frac,
-                "Sunlit_leaf_temperature": self.exogenous_inputs["temperature"],
-                "Shaded_leaf_temperature": self.exogenous_inputs["temperature"],
-            }
+        Absorbed_PAR_Sunlit, Absorbed_PAR_Shaded = self.LIGHT_ABSORB(
+            Scattering_Coefficient_PAR,
+            Direct_Beam_Extinction_Coefficient,
+            Scattered_Beam_Extinction_Coefficient_PAR,
+            Diffuse_Extinction_Coefficient_PAR,
+            Canopy_Beam_Reflection_Coefficient_PAR,
+            Canopy_Diffuse_Reflection_Coefficient_PAR,
+            Direct_PAR, Diffuse_PAR, Leaf_Area_Index
         )
+
+        Sunlit_Fraction = 1. / Direct_Beam_Extinction_Coefficient / Leaf_Area_Index * (
+                    1. - np.exp(-Direct_Beam_Extinction_Coefficient * Leaf_Area_Index))
+        
+        # Changing PAR from per ground area to per leaf area (to be used in the photosynthesis)
+        Absorbed_PAR_Sunlit /= Leaf_Area_Index * Sunlit_Fraction 
+        Absorbed_PAR_Shaded /= Leaf_Area_Index * (1 - Sunlit_Fraction) 
+        
+        # store aboveground variables as dict and add canopy temperature entries
+        aboveground_variables = {
+          'Absorbed_PAR_Sunlit': Absorbed_PAR_Sunlit,
+          'Absorbed_PAR_Shaded': Absorbed_PAR_Shaded,
+          'Sunlit_fraction': Sunlit_Fraction,
+          'Sunlit_leaf_temperature': self.exogenous_inputs['temperature'],
+          'Shaded_leaf_temperature': self.exogenous_inputs['temperature']
+        }
+        # update and store as collective environmental variables
+        self.__environmental_variables.update(aboveground_variables)
 
     # ------------------------------------------------------------------
-    def get_environmental_variables(self) -> ParamsDict:  # noqa: D401
-        return self._env_vars
+    def get_environmental_variables(self) -> ParamsDict:  
+        """
+        Get the environmental variables dictionary.
+        
+        Returns:
+            dict: Environmental variables
+        """
+        return self.__environmental_variables
